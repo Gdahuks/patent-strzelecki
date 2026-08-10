@@ -1,0 +1,38 @@
+Patent Strzelecki — aplikacja do nauki na teoretyczną część egzaminu na patent
+strzelecki PZSS.
+
+Copyright 2026 Hubert Książek
+
+Kod tego repozytorium jest udostępniony na licencji Apache License 2.0
+(plik LICENSE).
+
+
+TREŚĆ KURSU NIE JEST OBJĘTA TĄ LICENCJĄ
+
+Lekcje, pytania egzaminacyjne i ilustracje pochodzą z bezpłatnego kursu
+patentstrzelecki.eu, prowadzonego przez Braterstwo (Stowarzyszenie KS Amator),
+i pozostają jego własnością. Autor aplikacji korzysta z nich na podstawie
+zgody Stowarzyszenia KS Amator.
+
+Ta zgoda dotyczy tej aplikacji, a nie tego repozytorium: licencja Apache 2.0
+obejmuje wyłącznie kod i nie przenosi na nikogo prawa do materiałów kursu.
+Kto chce wydać własną aplikację opartą na tych materiałach, potrzebuje własnej
+zgody Stowarzyszenia KS Amator.
+
+Treści kursu nie ma w tym repozytorium — jest wyłączona przez .gitignore
+i pobierana lokalnie przy budowaniu paczki.
+
+
+TEKSTY AKTÓW PRAWNYCH
+
+Teksty ustaw i rozporządzeń pochodzą z API Sejmu RP (api.sejm.gov.pl) i jako
+akty normatywne nie są przedmiotem prawa autorskiego — art. 4 pkt 1 ustawy
+z dnia 4 lutego 1994 r. o prawie autorskim i prawach pokrewnych.
+
+
+ZNAKI TOWAROWE
+
+„Braterstwo" i „KS Amator" są oznaczeniami Stowarzyszenia KS Amator i są tu
+używane wyłącznie do wskazania źródła treści. Aplikacja jest nieoficjalna:
+nie jest prowadzona ani firmowana przez Braterstwo, ani przez Polski Związek
+Strzelectwa Sportowego.

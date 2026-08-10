@@ -1,0 +1,54 @@
+{
+  "expo": {
+    "name": "Patent Strzelecki",
+    "slug": "patent-strzelecki",
+    "version": "1.0.0",
+    "scheme": "patentstrzelecki",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "automatic",
+    "ios": {
+      "supportsTablet": false,
+      "bundleIdentifier": "io.github.gdahuks.patentstrzelecki",
+      "config": {
+        "usesNonExemptEncryption": false
+      },
+      "infoPlist": {
+        "CFBundleDevelopmentRegion": "pl",
+        "CFBundleLocalizations": ["pl"]
+      }
+    },
+    "android": {
+      "package": "io.github.gdahuks.patentstrzelecki",
+      "adaptiveIcon": {
+        "backgroundColor": "#F7941D",
+        "foregroundImage": "./assets/android-icon-foreground.png",
+        "monochromeImage": "./assets/android-icon-monochrome.png"
+      },
+      "predictiveBackGestureEnabled": true
+    },
+    "web": {
+      "favicon": "./assets/favicon.png"
+    },
+    "plugins": [
+      "expo-router",
+      "expo-sqlite",
+      "expo-asset",
+      "expo-web-browser",
+      [
+        "expo-splash-screen",
+        {
+          "image": "./assets/splash-icon.png",
+          "imageWidth": 160,
+          "backgroundColor": "#f6f7f9",
+          "dark": {
+            "backgroundColor": "#101317"
+          }
+        }
+      ]
+    ],
+    "experiments": {
+      "typedRoutes": true
+    }
+  }
+}

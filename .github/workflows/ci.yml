@@ -1,0 +1,29 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+
+      # Expo pins react to a version that conflicts with the react-dom pulled in by web-facing
+      # dependencies. Without this flag, the install ends in ERESOLVE.
+      - run: npm ci --legacy-peer-deps
+
+      - run: npx tsc --noEmit
+
+      - run: npx eslint .
+
+      # The content bundle isn't in the repository (it belongs to the course authors), so the
+      # tests that need it skip themselves: two whole files, plus one describe block inside a
+      # third. This is the state anyone sees the moment they clone this repository.
+      - run: npx vitest run
