@@ -25,12 +25,15 @@ import {
 import { plural } from '../../src/engine/plural';
 import { fileUrlToHref, isSameDocument, resolveLink, routeFor } from '../../src/navigation/links';
 import { useTheme } from '../../src/theme';
+import { useBottomInset } from '../../src/components/safeArea';
 
 export default function LessonScreen() {
   const { slug, q } = useLocalSearchParams<{ slug: string; q?: string }>();
   const theme = useTheme();
   const router = useRouter();
   const webview = useRef<WebView>(null);
+  // Holds "Oznacz jako przeczytane" — under a three-button navigation bar it was untappable.
+  const footerPadding = useBottomInset();
   const [showExercises, setShowExercises] = useState(false);
 
   // A phrase passed in from search results opens the lesson with the find bar already active.
@@ -186,7 +189,16 @@ export default function LessonScreen() {
         />
       )}
 
-      <View style={[styles.footer, { backgroundColor: theme.surface, borderTopColor: theme.border }]}>
+      <View
+        style={[
+          styles.footer,
+          {
+            backgroundColor: theme.surface,
+            borderTopColor: theme.border,
+            paddingBottom: footerPadding,
+          },
+        ]}
+      >
         {sets.length > 0 ? (
           <>
             {showExercises ? (

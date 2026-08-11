@@ -15,6 +15,7 @@ import { useScreenReader } from '../../src/a11y/useScreenReader';
 import { AttemptAnswerCard } from '../../src/components/AttemptAnswerCard';
 import { ExamStrip } from '../../src/components/ExamStrip';
 import { positionLabel } from '../../src/content/answers';
+import { useBottomInset } from '../../src/components/safeArea';
 import { Button, Card, Muted } from '../../src/components/ui';
 import { content } from '../../src/content/store';
 import type { Letter } from '../../src/content/types';
@@ -39,6 +40,9 @@ export default function ExamAttemptScreen() {
   const theme = useTheme();
   const router = useRouter();
   const screenReader = useScreenReader();
+  // The bar holds "Zakończ", so without the inset the exam cannot be submitted at all on a
+  // phone with three-button navigation. See `useBottomInset`.
+  const paddingBottom = useBottomInset(14);
 
   const { pool } = useLocalSearchParams<{ pool?: string }>();
   const fromWeak = pool === 'weak';
@@ -277,7 +281,12 @@ export default function ExamAttemptScreen() {
         })}
       </ScrollView>
 
-      <View style={[styles.nav, { borderTopColor: theme.border, backgroundColor: theme.surface }]}>
+      <View
+        style={[
+          styles.nav,
+          { borderTopColor: theme.border, backgroundColor: theme.surface, paddingBottom },
+        ]}
+      >
         <Pressable
           disabled={index === 0}
           onPress={() => setIndex((value) => value - 1)}
@@ -333,6 +342,7 @@ function ExamSummary({
   onClose: () => void;
 }) {
   const theme = useTheme();
+  const paddingBottom = useBottomInset(32);
   const mistakes = result.answers.filter((answer) => !answer.wasCorrect);
   const correct = result.answers.filter((answer) => answer.wasCorrect);
 
@@ -346,7 +356,7 @@ function ExamSummary({
   }, [result]);
 
   return (
-    <ScrollView contentContainerStyle={styles.body}>
+    <ScrollView contentContainerStyle={[styles.body, { paddingBottom }]}>
       {/* The result is already saved, so going back loses nothing — without this button the
           only way out was scrolling through the whole mistake list to the very bottom. */}
       <Stack.Screen options={{ title: 'Wynik' }} />

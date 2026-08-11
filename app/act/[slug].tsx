@@ -14,6 +14,7 @@ import { WebView, type WebViewMessageEvent } from 'react-native-webview';
 import { FindBar, useFindInPage } from '../../src/components/FindBar';
 import { HeaderIcon } from '../../src/components/HeaderIcon';
 import { HeaderTitle } from '../../src/components/HeaderTitle';
+import { useBottomInset } from '../../src/components/safeArea';
 import { Muted } from '../../src/components/ui';
 import { findAct, isReadable, sourceDocuments } from '../../src/content/acts';
 import {
@@ -66,6 +67,10 @@ export default function ActScreen() {
   const theme = useTheme();
   // Same size as in lessons — an act reads the same way as a lesson's text.
   const { contentSize } = useSettings();
+  // An act has no footer, so its text runs all the way to the window's bottom edge — and
+  // under a three-button navigation bar the last line of a document was unreachable. The
+  // inset goes into the page's own CSS, so the text keeps scrolling full-bleed.
+  const bottomInset = useBottomInset();
   const webview = useRef<WebView>(null);
 
   const act = findAct(slug);
@@ -189,8 +194,9 @@ export default function ActScreen() {
      group that sits this exact exam; the typeface is visible regardless of colour
      perception. The same rule as the verdict in the ABC quiz. */
   .przyszle-tresc { color: ${theme.muted}; font-style: italic; }
+  body { padding-bottom: ${bottomInset}px; }
 </style></head><body>${wordings.html}</body></html>`;
-  }, [act, wordings, theme, contentSize]);
+  }, [act, wordings, theme, contentSize, bottomInset]);
 
   const { accept: acceptFind, query: findQuery, rerun: rerunFind } = find;
 
@@ -433,7 +439,11 @@ export default function ActScreen() {
           <View
             style={[
               styles.sheet,
-              { backgroundColor: theme.surface, borderTopColor: theme.border },
+              {
+                backgroundColor: theme.surface,
+                borderTopColor: theme.border,
+                paddingBottom: bottomInset + 32,
+              },
             ]}
           >
             {/* "Nowe brzmienie" (new wording), not just "Brzmienie": the sheet opens from a
