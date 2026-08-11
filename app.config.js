@@ -78,8 +78,9 @@ function withInternetForDebug(config) {
  * internet. The symptoms are written down so nobody drops a rule to see what happens — the
  * build succeeds either way, and the damage only shows up on a device.
  */
-const KEEP_RULES = `
-# --- patent-strzelecki ---------------------------------------------------------
+const KEEP_MARKER = '# --- patent-strzelecki ---';
+
+const KEEP_RULES = `${KEEP_MARKER}------------------------------------------------------
 
 # React Native resolves a view manager's generated property setter by class name
 # ("<ViewManager>$$PropsSetter"), so once R8 renames the manager the lookup fails and no prop
@@ -102,14 +103,33 @@ const KEEP_RULES = `
 # on "Liczę postęp…" for good — both database reads that failed without a word in the log,
 # because the promise is consumed with "void" and nothing catches the rejection.
 -keep class expo.modules.** { *; }
+
+# Fresco decodes images in native code and registers its decoders by class, so R8 sees a
+# reference to almost none of the pipeline: it removed 742 classes under
+# com.facebook.imagepipeline, .drawee and .animated. React Native ships rules for
+# @DoNotStrip and they are not enough — the members native code reaches indirectly carry no
+# annotation. Symptom: every <Image> stayed blank, so lesson illustrations and the "Schemat"
+# screen showed nothing at all, while the same build with minification switched off rendered
+# them. That comparison is how this was pinned down; the build logs nothing.
+-keep class com.facebook.imagepipeline.** { *; }
+-keep class com.facebook.imageformat.** { *; }
+-keep class com.facebook.drawee.** { *; }
+-keep class com.facebook.animated.** { *; }
+-keep class com.facebook.common.** { *; }
+-dontwarn com.facebook.imagepipeline.**
 `;
 
 /**
- * Appends our keep rules to the generated \`proguard-rules.pro\`.
+ * Writes our keep rules into the generated \`proguard-rules.pro\`.
  *
  * A dangerous mod rather than a Gradle one, because the file is plain text owned by the
- * template. The marker line guards against a second \`prebuild\` writing the block twice —
- * mods receive the file as the previous run left it.
+ * template.
+ *
+ * The block is **replaced**, not appended-once. Mods receive the file as the previous run left
+ * it, so a plain "append if absent" would look idempotent and quietly stop working the moment
+ * anyone edited \`KEEP_RULES\`: the marker is already there, so nothing gets written, and the
+ * rule change only lands after \`make clean-native\`. Cutting everything from the marker down
+ * and writing it again makes an edit here take effect on the next \`prebuild\`.
  */
 function withKeepRules(config) {
   return withDangerousMod(config, [
@@ -121,9 +141,9 @@ function withKeepRules(config) {
         'proguard-rules.pro',
       );
       const current = fs.readFileSync(file, 'utf8');
-      if (!current.includes('--- patent-strzelecki ---')) {
-        fs.writeFileSync(file, `${current.trimEnd()}\n${KEEP_RULES}`);
-      }
+      const marker = current.indexOf(KEEP_MARKER);
+      const template = marker === -1 ? current : current.slice(0, marker);
+      fs.writeFileSync(file, `${template.trimEnd()}\n\n${KEEP_RULES}`);
       return modConfig;
     },
   ]);
@@ -156,12 +176,12 @@ function withKeepRules(config) {
  * `android.r8.optimizedResourceShrinking` is deliberately absent: it needs AGP 8.12, and the
  * React Native Gradle plugin pins 8.11. It becomes the default in AGP 9.0 anyway.
  *
- * R8 removes whatever it can't see a reference to, and it can't see reflection. Nothing in
- * this project reaches for classes by name, and every native dependency here ships its own
- * keep rules, so no rules of our own are needed — but the only real proof is a **release**
- * build clicked through on a device. Unit tests don't run R8. If something breaks after an
- * upgrade, read the class name out of the stack trace and add a keep rule; don't turn this
- * back off.
+ * R8 removes whatever it can't see a reference to, and it can't see reflection. Every native
+ * dependency here ships keep rules of its own, and they are **not enough**: the first build
+ * with R8 came out silently broken, and `KEEP_RULES` above is what it took to fix it. The only
+ * real proof is a **release** build clicked through on a device — unit tests don't run R8, and
+ * the build succeeds either way. If something breaks after an upgrade, read the class name out
+ * of the stack trace and add a rule there; don't turn this back off.
  *
  * The deobfuscation map needs no uploading: with an AAB, Gradle packs `mapping.txt` into the
  * bundle as `BUNDLE-METADATA/com.android.tools.build.obfuscation/proguard.map`, and Play
@@ -192,8 +212,10 @@ function withReleaseMinification(config) {
     const gradle = modConfig.modResults.contents;
     if (gradle.includes('proguard-android-optimize.txt')) return modConfig;
 
-    const plain = 'getDefaultProguardFile("proguard-android.txt")';
-    if (!gradle.includes(plain)) {
+    // Matched with a pattern, not a literal: the template has changed quote style before, and
+    // a plugin that throws over a swapped apostrophe would block the build for no reason.
+    const plain = /getDefaultProguardFile\(\s*(['"])proguard-android\.txt\1\s*\)/;
+    if (!plain.test(gradle)) {
       throw new Error(
         'Could not find the default ProGuard file in android/app/build.gradle — the'
           + ' minification plugin needs a look after a template change.',
@@ -202,7 +224,7 @@ function withReleaseMinification(config) {
 
     modConfig.modResults.contents = gradle.replace(
       plain,
-      'getDefaultProguardFile("proguard-android-optimize.txt")',
+      (_match, quote) => `getDefaultProguardFile(${quote}proguard-android-optimize.txt${quote})`,
     );
     return modConfig;
   });
