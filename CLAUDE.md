@@ -354,6 +354,21 @@ body paragraphs, so without that exclusion the points inside a paragraph merge i
 times longer than the firearms act and would win on sheer length alone; the order that ships in
 the bundle instead follows how close an act is to the course itself.
 
+**A release build takes minutes, not seconds, and R8 is why.** Measured on the same machine and
+the same tree: a release build with minification switched off finishes in **28 seconds**, with
+it on in **7–11 minutes**. R8 processes the whole program at once, and the keep rules in
+`app.config.js` widen what it has to chew through. Nothing is stuck — don't go looking for a
+hung Gradle daemon, and budget for it before an AAB upload. Debug builds are unaffected.
+
+The keep rules themselves are the other half of this: R8 removes whatever it can't see a
+reference to, it can't see reflection, and **the build succeeds either way**. Two breakages
+found this way, both silent, both invisible to `make check`: view-manager props stopped reaching
+native views (blank WebView), and Fresco's image pipeline was gutted (every `<Image>` blank).
+The rules and the symptom that identifies each one live in `KEEP_RULES` in `app.config.js`. The
+way to pin such a thing down is a control build with `-Pandroid.enableMinifyInReleaseBuilds=false`
+and the same screen side by side; R8's own reports (`android/app/build/outputs/mapping/release/`,
+especially `usage.txt` and `configuration.txt`) then say what was dropped and which rules applied.
+
 **Android release signing lives in `app.config.js`, not in `build.gradle`.** The React Native
 template sets `release { signingConfig signingConfigs.debug }`, i.e. it signs the release build
 with a key that ships in every checkout of the template on earth — Google Play rejects a file
