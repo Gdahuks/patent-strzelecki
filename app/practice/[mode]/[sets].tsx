@@ -55,6 +55,10 @@ export default function ExerciseScreen() {
   // The footer is the bottom-most element, so it carries the navigation-bar inset for the
   // whole screen — the "Dalej" row above it then clears the bar on its own.
   const footerPadding = useBottomInset(14);
+  // The finished-set screen has no footer, so it keeps its own padding (28 on every side) and
+  // only adds the inset on top of it — reusing `footerPadding` here would have shrunk the
+  // bottom below the other three sides on a device with no bottom inset.
+  const donePadding = useBottomInset(28);
 
   // The "moje błędy" (my mistakes) set doesn't exist in the content bundle — it's assembled
   // from the progress database, so its questions have to be loaded asynchronously, same as
@@ -453,7 +457,7 @@ export default function ExerciseScreen() {
 
   if (mastered) {
     return (
-      <ScrollView contentContainerStyle={[styles.done, { paddingBottom: footerPadding }]}>
+      <ScrollView contentContainerStyle={[styles.done, { paddingBottom: donePadding }]}>
         {header}
         <Text style={styles.doneMark}>🎯</Text>
         <Text style={[styles.doneTitle, { color: theme.text }]}>{doneTitle}</Text>
