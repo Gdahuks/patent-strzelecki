@@ -11,6 +11,7 @@ import {
 } from 'react-native';
 
 import { AttemptAnswerCard } from '../../../src/components/AttemptAnswerCard';
+import { useBottomInset } from '../../../src/components/safeArea';
 import { Card, Muted } from '../../../src/components/ui';
 import { type AttemptDetail, attemptDetail, deleteAttempt } from '../../../src/db/database';
 import { PASS_THRESHOLD, QUESTION_COUNT } from '../../../src/engine/exam';
@@ -20,6 +21,7 @@ export default function AttemptScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const theme = useTheme();
   const router = useRouter();
+  const paddingBottom = useBottomInset(32);
   const [attempt, setAttempt] = useState<AttemptDetail | null | 'loading'>('loading');
 
   useEffect(() => {
@@ -68,7 +70,7 @@ export default function AttemptScreen() {
   const minutes = Math.max(1, Math.round((attempt.finishedAt - attempt.startedAt) / 60000));
 
   return (
-    <ScrollView contentContainerStyle={styles.body}>
+    <ScrollView contentContainerStyle={[styles.body, { paddingBottom }]}>
       <Stack.Screen
         options={{
           title: new Date(attempt.finishedAt).toLocaleString('pl-PL', {

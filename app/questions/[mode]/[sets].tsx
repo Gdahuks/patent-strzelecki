@@ -10,6 +10,7 @@ import {
 } from 'react-native';
 
 import { LawLink, lawAccessibilityAction, openLaw } from '../../../src/components/LawLink';
+import { useBottomInset } from '../../../src/components/safeArea';
 import { Muted } from '../../../src/components/ui';
 import { WEAK_SET_SLUG, content } from '../../../src/content/store';
 import type { Question } from '../../../src/content/types';
@@ -50,6 +51,7 @@ export default function QuestionListScreen() {
 
   const theme = useTheme();
   const router = useRouter();
+  const paddingBottom = useBottomInset(32);
   const { levels } = useSettings();
 
   const [questions, setQuestions] = useState<Question[] | null>(null);
@@ -130,7 +132,7 @@ export default function QuestionListScreen() {
     <SectionList
       sections={sections}
       keyExtractor={(id) => id}
-      contentContainerStyle={styles.list}
+      contentContainerStyle={[styles.list, { paddingBottom }]}
       stickySectionHeadersEnabled={false}
       ListHeaderComponent={
         <View style={styles.header}>

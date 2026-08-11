@@ -3,6 +3,7 @@ import Constants from 'expo-constants';
 import { useCallback } from 'react';
 import { Alert, Linking, Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
+import { useBottomInset } from '../src/components/safeArea';
 import { Card, Muted } from '../src/components/ui';
 import { openInAppBrowser } from '../src/content/openSource';
 import { content } from '../src/content/store';
@@ -94,6 +95,7 @@ const RELEASE_LINE = versionLine(RELEASE);
 
 export default function SettingsScreen() {
   const theme = useTheme();
+  const paddingBottom = useBottomInset(32);
   const { levels, setLevels } = useSettings();
 
   /**
@@ -149,7 +151,7 @@ export default function SettingsScreen() {
   );
 
   return (
-    <ScrollView contentContainerStyle={styles.body}>
+    <ScrollView contentContainerStyle={[styles.body, { paddingBottom }]}>
       <Card>
         <Text style={[styles.label, { color: theme.text }]}>
           Ile poprawnych odpowiedzi to „opanowane”

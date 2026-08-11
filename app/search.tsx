@@ -12,6 +12,7 @@ import {
 
 import { announce } from '../src/a11y/announce';
 import { LawLink, lawAccessibilityAction, openLaw } from '../src/components/LawLink';
+import { useBottomInset } from '../src/components/safeArea';
 import { Muted } from '../src/components/ui';
 import { type ActHit, searchActs, warmActText } from '../src/content/actSearch';
 import { allActs, isReadable } from '../src/content/acts';
@@ -57,6 +58,7 @@ function actLabel(count: number): string {
 
 export default function SearchScreen() {
   const theme = useTheme();
+  const paddingBottom = useBottomInset(32);
   const router = useRouter();
   const [query, setQuery] = useState('');
   // The phrase results are actually computed against — trailing the input field by `SEARCH_DELAY`.
@@ -148,7 +150,7 @@ export default function SearchScreen() {
               ? `a:${row.act.slug}`
               : `q:${row.question.id}`
         }
-        contentContainerStyle={styles.list}
+        contentContainerStyle={[styles.list, { paddingBottom }]}
         keyboardShouldPersistTaps="handled"
         ListEmptyComponent={
           phrase.trim().length === 0 ? (
