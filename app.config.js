@@ -22,7 +22,7 @@ const path = require('node:path');
 // A sub-export of the `expo` package, not a separate `@expo/config-plugins` dependency:
 // installing it directly duplicated a package Expo already carries, and it was the only
 // warning from `npx expo-doctor` (risk of version drift on an SDK bump).
-const { withAppBuildGradle, withDangerousMod } = require('expo/config-plugins');
+const { withAppBuildGradle, withDangerousMod, withGradleProperties } = require('expo/config-plugins');
 
 /**
  * Restores `INTERNET` in the **debug** variant.
@@ -70,6 +70,181 @@ function withInternetForDebug(config) {
     },
   ]);
 }
+
+/**
+ * Keep rules that R8 can't work out on its own.
+ *
+ * Both groups come from a release build that ran and misbehaved, not from a list found on the
+ * internet. The symptoms are written down so nobody drops a rule to see what happens — the
+ * build succeeds either way, and the damage only shows up on a device.
+ */
+const KEEP_MARKER = '# --- patent-strzelecki ---';
+
+const KEEP_RULES = `${KEEP_MARKER}------------------------------------------------------
+
+# React Native looks up a view manager's generated property setter by class name
+# ("<ViewManager>$$PropsSetter"); when there is none it falls back to reflection over the
+# manager's @ReactProp methods (FallbackViewManagerSetter in ViewManagerPropertyUpdater.kt).
+# That fallback resolves each prop by name and does nothing at all when the name is missing
+# from its map, which is why this breaks in silence: R8 renamed the manager and stripped the
+# annotated methods, so every prop vanished without an error. Symptom: the lesson WebView
+# rendered blank, because its "source" never arrived, and the footer collapsed under the
+# header, because the view had no height.
+#
+# Do NOT use the log line "ViewManagerPropertyUpdater: Could not find generated setter" as the
+# symptom, and do not read anything into an obfuscated class name in it either. A healthy
+# release build logs it for 41 classes on every start. Nothing generates those setters here
+# (neither mapping.txt nor usage.txt mentions a single $$PropsSetter, so R8 never saw one), so
+# the fallback above is simply the normal path. The obfuscated names in that message are
+# ReactShadowNode subclasses — findNodeSetter takes the same route — and renaming them is
+# harmless, because the fallback resolves props by @ReactProp annotation rather than by class
+# name. The rule below covers view managers; the annotation rule is what keeps both paths alive.
+#
+# The only real symptom is props not arriving on screen. To pin one down, build the control
+# variant with -Pandroid.enableMinifyInReleaseBuilds=false and compare the same screen.
+-keep class * extends com.facebook.react.uimanager.ViewManager { *; }
+# Currently matches nothing, kept as insurance in case a future SDK does generate these.
+-keep class **$$PropsSetter { *; }
+-keepclassmembers class * {
+  @com.facebook.react.uimanager.annotations.ReactProp <methods>;
+}
+-keepclassmembers class * {
+  @com.facebook.react.uimanager.annotations.ReactPropGroup <methods>;
+}
+
+# Expo modules publish their functions through reflection over Kotlin types, which R8 in full
+# mode cannot follow. Expo ships rules for the module classes themselves, but not for
+# everything those reach. Symptom: reading progress never loaded and the exercise list hung
+# on "Liczę postęp…" for good — both database reads that failed without a word in the log,
+# because the promise is consumed with "void" and nothing catches the rejection.
+-keep class expo.modules.** { *; }
+
+# Fresco decodes images in native code and registers its decoders by class, so R8 sees a
+# reference to almost none of the pipeline: it removed 742 classes under
+# com.facebook.imagepipeline, .drawee and .animated. React Native ships rules for
+# @DoNotStrip and they are not enough — the members native code reaches indirectly carry no
+# annotation. Symptom: every <Image> stayed blank, so lesson illustrations and the "Schemat"
+# screen showed nothing at all, while the same build with minification switched off rendered
+# them. That comparison is how this was pinned down; the build logs nothing.
+-keep class com.facebook.imagepipeline.** { *; }
+-keep class com.facebook.imageformat.** { *; }
+-keep class com.facebook.drawee.** { *; }
+-keep class com.facebook.animated.** { *; }
+-keep class com.facebook.common.** { *; }
+-dontwarn com.facebook.imagepipeline.**
+`;
+
+/**
+ * Writes our keep rules into the generated \`proguard-rules.pro\`.
+ *
+ * A dangerous mod rather than a Gradle one, because the file is plain text owned by the
+ * template.
+ *
+ * The block is **replaced**, not appended-once. Mods receive the file as the previous run left
+ * it, so a plain "append if absent" would look idempotent and quietly stop working the moment
+ * anyone edited \`KEEP_RULES\`: the marker is already there, so nothing gets written, and the
+ * rule change only lands after \`make clean-native\`. Cutting everything from the marker down
+ * and writing it again makes an edit here take effect on the next \`prebuild\`.
+ */
+function withKeepRules(config) {
+  return withDangerousMod(config, [
+    'android',
+    (modConfig) => {
+      const file = path.join(
+        modConfig.modRequest.platformProjectRoot,
+        'app',
+        'proguard-rules.pro',
+      );
+      const current = fs.readFileSync(file, 'utf8');
+      const marker = current.indexOf(KEEP_MARKER);
+      const template = marker === -1 ? current : current.slice(0, marker);
+      fs.writeFileSync(file, `${template.trimEnd()}\n\n${KEEP_RULES}`);
+      return modConfig;
+    },
+  ]);
+}
+
+/**
+ * Turns R8 on for the release build: code shrinking plus resource shrinking.
+ *
+ * Version 0.1.0 shipped without either. The React Native template reads two Gradle
+ * properties and defaults both to `false`, and nothing set them — so `minifyEnabled` was off
+ * and the package carried every class name and every unused method the dependencies brought
+ * along.
+ *
+ * Why a plugin and not an edit in `android/app/build.gradle`: that directory is generated by
+ * `expo prebuild` and is not in the repository, so an edit there survives on one machine
+ * until the next `make clean-native` and reaches nobody else. The same reasoning as
+ * `withReleaseSigning`.
+ *
+ * Three deliberate choices, all from
+ * developer.android.com/topic/performance/app-optimization/enable-app-optimization:
+ *
+ * - **both switches, not just the first.** Google's guidance is to enable code and resource
+ *   shrinking together; resource shrinking needs `minifyEnabled` anyway.
+ * - **`proguard-android-optimize.txt` instead of `proguard-android.txt`.** The plain file
+ *   turns optimization passes off, which is half of what R8 is for. AGP 9.0 drops support for
+ *   it outright, so this is also one less thing to fix at the next upgrade.
+ * - **full mode stays on.** It is the default from AGP 8.0 (we build with 8.11) and nothing
+ *   in `gradle.properties` disables it. Don't add `android.enableR8.fullMode=false`.
+ *
+ * `android.r8.optimizedResourceShrinking` is deliberately absent: it needs AGP 8.12, and the
+ * React Native Gradle plugin pins 8.11. It becomes the default in AGP 9.0 anyway.
+ *
+ * R8 removes whatever it can't see a reference to, and it can't see reflection. Every native
+ * dependency here ships keep rules of its own, and they are **not enough**: the first build
+ * with R8 came out silently broken, and `KEEP_RULES` above is what it took to fix it. The only
+ * real proof is a **release** build clicked through on a device — unit tests don't run R8, and
+ * the build succeeds either way. If something breaks after an upgrade, read the class name out
+ * of the stack trace and add a rule there; don't turn this back off.
+ *
+ * The deobfuscation map needs no uploading: with an AAB, Gradle packs `mapping.txt` into the
+ * bundle as `BUNDLE-METADATA/com.android.tools.build.obfuscation/proguard.map`, and Play
+ * takes it from there. Manual upload is an APK-only chore.
+ */
+
+function withReleaseMinification(config) {
+  const PROPERTIES = {
+    'android.enableMinifyInReleaseBuilds': 'true',
+    'android.enableShrinkResourcesInReleaseBuilds': 'true',
+  };
+
+  const withProperties = withGradleProperties(config, (modConfig) => {
+    for (const [key, value] of Object.entries(PROPERTIES)) {
+      const existing = modConfig.modResults.find(
+        (item) => item.type === 'property' && item.key === key,
+      );
+      // Prebuild hands the mod the file left by the previous run, so an entry we wrote last
+      // time is already there — set it in place instead of appending a second one, which
+      // Gradle would read as a duplicate key.
+      if (existing) existing.value = value;
+      else modConfig.modResults.push({ type: 'property', key, value });
+    }
+    return modConfig;
+  });
+
+  return withAppBuildGradle(withProperties, (modConfig) => {
+    const gradle = modConfig.modResults.contents;
+    if (gradle.includes('proguard-android-optimize.txt')) return modConfig;
+
+    // Matched with a pattern, not a literal: the template has changed quote style before, and
+    // a plugin that throws over a swapped apostrophe would block the build for no reason.
+    const plain = /getDefaultProguardFile\(\s*(['"])proguard-android\.txt\1\s*\)/;
+    if (!plain.test(gradle)) {
+      throw new Error(
+        'Could not find the default ProGuard file in android/app/build.gradle — the'
+          + ' minification plugin needs a look after a template change.',
+      );
+    }
+
+    modConfig.modResults.contents = gradle.replace(
+      plain,
+      (_match, quote) => `getDefaultProguardFile(${quote}proguard-android-optimize.txt${quote})`,
+    );
+    return modConfig;
+  });
+}
+
 
 /**
  * Signs the release build with the upload key instead of the template's debug key.
@@ -269,7 +444,7 @@ module.exports = ({ config }) => {
   const build = buildCounter();
   const commit = sourceCommit();
 
-  return withReleaseSigning(withInternetForDebug({
+  return withKeepRules(withReleaseMinification(withReleaseSigning(withInternetForDebug({
     ...config,
     version: storeVersion(config.version),
     // `extra` reaches the app as `Constants.expoConfig.extra` — the only way a value computed
@@ -292,5 +467,5 @@ module.exports = ({ config }) => {
       versionCode: build,
       blockedPermissions: UNUSED_PERMISSIONS,
     },
-  }));
+  }))));
 };

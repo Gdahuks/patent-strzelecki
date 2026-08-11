@@ -354,6 +354,27 @@ body paragraphs, so without that exclusion the points inside a paragraph merge i
 times longer than the firearms act and would win on sheer length alone; the order that ships in
 the bundle instead follows how close an act is to the course itself.
 
+**R8 makes a release build noticeably slower, and it is memory-hungry.** It processes the whole
+program in one pass, and the keep rules in `app.config.js` widen what it has to chew through.
+Debug builds are unaffected. No clean before/after figure is recorded here on purpose: the
+builds that motivated this note ran on a machine with a load average above 30 and almost no free
+RAM, which inflated everything, so any ratio taken from them would be fiction. If you need a
+number, measure it on an idle machine.
+
+Worth knowing for the same reason: when a build seems to hang, check the host before the code.
+A saturated Mac shows up as `adb` calls timing out, content materialisation crawling, and the
+emulator dying on internal timeouts (`abort_after_time_out … for 5000ms` from the Bluetooth
+stack has nothing to do with this app). `uptime` and `vm_stat` settle that in seconds.
+
+The keep rules themselves are the other half of this: R8 removes whatever it can't see a
+reference to, it can't see reflection, and **the build succeeds either way**. Two breakages
+found this way, both silent, both invisible to `make check`: view-manager props stopped reaching
+native views (blank WebView), and Fresco's image pipeline was gutted (every `<Image>` blank).
+The rules and the symptom that identifies each one live in `KEEP_RULES` in `app.config.js`. The
+way to pin such a thing down is a control build with `-Pandroid.enableMinifyInReleaseBuilds=false`
+and the same screen side by side; R8's own reports (`android/app/build/outputs/mapping/release/`,
+especially `usage.txt` and `configuration.txt`) then say what was dropped and which rules applied.
+
 **Android release signing lives in `app.config.js`, not in `build.gradle`.** The React Native
 template sets `release { signingConfig signingConfigs.debug }`, i.e. it signs the release build
 with a key that ships in every checkout of the template on earth — Google Play rejects a file
