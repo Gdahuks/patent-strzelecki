@@ -82,13 +82,28 @@ const KEEP_MARKER = '# --- patent-strzelecki ---';
 
 const KEEP_RULES = `${KEEP_MARKER}------------------------------------------------------
 
-# React Native resolves a view manager's generated property setter by class name
-# ("<ViewManager>$$PropsSetter"), so once R8 renames the manager the lookup fails and no prop
-# reaches the native view. Symptom: the lesson WebView rendered blank, because its "source"
-# never arrived, and the footer collapsed under the header, because the view had no height.
-# The log line to recognise it by: "ViewManagerPropertyUpdater: Could not find generated
-# setter for class J3.a".
+# React Native looks up a view manager's generated property setter by class name
+# ("<ViewManager>$$PropsSetter"); when there is none it falls back to reflection over the
+# manager's @ReactProp methods (FallbackViewManagerSetter in ViewManagerPropertyUpdater.kt).
+# That fallback resolves each prop by name and does nothing at all when the name is missing
+# from its map, which is why this breaks in silence: R8 renamed the manager and stripped the
+# annotated methods, so every prop vanished without an error. Symptom: the lesson WebView
+# rendered blank, because its "source" never arrived, and the footer collapsed under the
+# header, because the view had no height.
+#
+# Do NOT use the log line "ViewManagerPropertyUpdater: Could not find generated setter" as the
+# symptom, and do not read anything into an obfuscated class name in it either. A healthy
+# release build logs it for 41 classes on every start. Nothing generates those setters here
+# (neither mapping.txt nor usage.txt mentions a single $$PropsSetter, so R8 never saw one), so
+# the fallback above is simply the normal path. The obfuscated names in that message are
+# ReactShadowNode subclasses — findNodeSetter takes the same route — and renaming them is
+# harmless, because the fallback resolves props by @ReactProp annotation rather than by class
+# name. The rule below covers view managers; the annotation rule is what keeps both paths alive.
+#
+# The only real symptom is props not arriving on screen. To pin one down, build the control
+# variant with -Pandroid.enableMinifyInReleaseBuilds=false and compare the same screen.
 -keep class * extends com.facebook.react.uimanager.ViewManager { *; }
+# Currently matches nothing, kept as insurance in case a future SDK does generate these.
 -keep class **$$PropsSetter { *; }
 -keepclassmembers class * {
   @com.facebook.react.uimanager.annotations.ReactProp <methods>;
