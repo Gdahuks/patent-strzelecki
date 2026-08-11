@@ -354,11 +354,17 @@ body paragraphs, so without that exclusion the points inside a paragraph merge i
 times longer than the firearms act and would win on sheer length alone; the order that ships in
 the bundle instead follows how close an act is to the course itself.
 
-**A release build takes minutes, not seconds, and R8 is why.** Measured on the same machine and
-the same tree: a release build with minification switched off finishes in **28 seconds**, with
-it on in **7–11 minutes**. R8 processes the whole program at once, and the keep rules in
-`app.config.js` widen what it has to chew through. Nothing is stuck — don't go looking for a
-hung Gradle daemon, and budget for it before an AAB upload. Debug builds are unaffected.
+**R8 makes a release build noticeably slower, and it is memory-hungry.** It processes the whole
+program in one pass, and the keep rules in `app.config.js` widen what it has to chew through.
+Debug builds are unaffected. No clean before/after figure is recorded here on purpose: the
+builds that motivated this note ran on a machine with a load average above 30 and almost no free
+RAM, which inflated everything, so any ratio taken from them would be fiction. If you need a
+number, measure it on an idle machine.
+
+Worth knowing for the same reason: when a build seems to hang, check the host before the code.
+A saturated Mac shows up as `adb` calls timing out, content materialisation crawling, and the
+emulator dying on internal timeouts (`abort_after_time_out … for 5000ms` from the Bluetooth
+stack has nothing to do with this app). `uptime` and `vm_stat` settle that in seconds.
 
 The keep rules themselves are the other half of this: R8 removes whatever it can't see a
 reference to, it can't see reflection, and **the build succeeds either way**. Two breakages
