@@ -191,8 +191,12 @@ export default function EgzaminScreen() {
           <Muted>
             {/* „w egzaminach" (in exams) was true when the pool spanned both profiles, and
                 stayed on screen as a promise the draw no longer keeps. */}
-            Losowany z {missedCount} {plural(missedCount, 'pytania', 'pytań', 'pytań')}, na których
-            pomyliłeś się w tym egzaminie. Zasady te same; gdy błędów nie starcza na pełny zestaw
+            Losowany z {missedCount} {plural(missedCount, 'pytania', 'pytań', 'pytań')},{' '}
+            {/* The noun was inflected but the pronoun wasn't, so exactly one mistake read
+                „z 1 pytania, na których". One mistake is the common case on a fresh
+                profile, since each exam keeps its own pool. */}
+            {plural(missedCount, 'na którym', 'na których', 'na których')} pomyliłeś się
+            w tym egzaminie. Zasady te same; gdy błędów nie starcza na pełny zestaw
             {profile.criticalCount > 0 ? ' albo na czwórkę krytyczną' : ''}, pula dopełniana jest
             z całej puli tego egzaminu.
           </Muted>

@@ -265,6 +265,25 @@ export function gradeExam(
   };
 }
 
+/**
+ * How long an attempt took, as `M:SS` — the „Czas rozwiązywania" line.
+ *
+ * Exact, not "about N minutes". The app knows this to the millisecond and already formats a
+ * clock for the countdown, so rounding threw away information for nothing — and the rounding
+ * had a floor of one minute, which turned a paper handed in after forty seconds into a lie.
+ *
+ * This is **wall-clock time**, not time on the exam's own clock: the countdown stops while
+ * the app sits in the background, so an attempt can span more wall-clock time than the limit
+ * allows. Hence the bare duration, never „18:42 z 20:00" — that comparison would sooner or
+ * later read „34:10 z 20:00".
+ *
+ * Both summaries use this — the one right after the exam and the one reached from history —
+ * so the two can't drift apart.
+ */
+export function solvingTime(milliseconds: number): string {
+  return formatRemaining(milliseconds / 1000);
+}
+
 export function formatRemaining(seconds: number): string {
   const clamped = Math.max(0, Math.floor(seconds));
   const minutes = Math.floor(clamped / 60);
