@@ -2,7 +2,7 @@ import { useFocusEffect, useRouter } from 'expo-router';
 import { useCallback, useState } from 'react';
 import { Alert, FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
 
-import { Muted, SegmentedBar } from '../../src/components/ui';
+import { ModeSwitch, Muted, SegmentedBar } from '../../src/components/ui';
 import { WEAK_SET_SLUG, WEAK_SET_TITLE, content } from '../../src/content/store';
 import {
   type PracticeMode,
@@ -156,36 +156,7 @@ export default function CwiczeniaScreen() {
         <View style={styles.header}>
           <Text style={[styles.heading, { color: theme.text }]}>Ćwiczenia</Text>
 
-          <View style={[styles.switch, { backgroundColor: theme.surface, borderColor: theme.border }]}>
-            {MODES.map((entry) => {
-              const active = entry.key === mode;
-              return (
-                <Pressable
-                  key={entry.key}
-                  onPress={() => setMode(entry.key)}
-                  accessibilityRole="tab"
-                  // The selected mode is shown purely through the background fill — without
-                  // this state, a screen reader announces two identical options and there's
-                  // no way to tell which list you're actually looking at.
-                  accessibilityState={{ selected: active }}
-                  style={({ pressed }) => [
-                    styles.switchOption,
-                    active && { backgroundColor: theme.accent },
-                    pressed && styles.pressed,
-                  ]}
-                >
-                  <Text
-                    style={[
-                      styles.switchLabel,
-                      { color: active ? theme.onFill : theme.text },
-                    ]}
-                  >
-                    {entry.label}
-                  </Text>
-                </Pressable>
-              );
-            })}
-          </View>
+          <ModeSwitch options={MODES} value={mode} onChange={setMode} />
 
           <Muted>
             {mode === 'flashcards'
@@ -270,15 +241,6 @@ const styles = StyleSheet.create({
   list: { padding: 16, gap: 10, paddingBottom: 32 },
   header: { gap: 10, marginBottom: 6 },
   heading: { fontSize: 26, fontWeight: '700' },
-  switch: {
-    flexDirection: 'row',
-    borderRadius: 11,
-    borderWidth: StyleSheet.hairlineWidth,
-    padding: 3,
-    gap: 3,
-  },
-  switchOption: { flex: 1, borderRadius: 9, paddingVertical: 9, alignItems: 'center' },
-  switchLabel: { fontSize: 15, fontWeight: '600' },
   row: { borderRadius: 14, padding: 16, gap: 8 },
   rowHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'baseline' },
   title: { fontSize: 16, fontWeight: '600', flex: 1, marginRight: 10 },
