@@ -1,3 +1,6 @@
+// `usePreventRemove` lives in React Navigation's core and expo-router doesn't re-export it,
+// so it comes straight from the package expo-router itself depends on.
+import { useNavigation, usePreventRemove } from '@react-navigation/native';
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
@@ -29,6 +32,7 @@ import {
   examProfile,
   formatRemaining,
   gradeExam,
+  solvingMinutes,
   unansweredNumbers,
 } from '../../src/engine/exam';
 import { plural } from '../../src/engine/plural';
@@ -61,6 +65,8 @@ export default function ExamAttemptScreen() {
   const [chosen, setChosen] = useState<Map<string, Letter | null>>(new Map());
   const [remaining, setRemaining] = useState(profile.timeLimitSeconds);
   const [result, setResult] = useState<ExamResult | null>(null);
+  /** How long the finished attempt took — frozen at hand-in, so re-renders can't grow it. */
+  const [elapsed, setElapsed] = useState(0);
 
   useEffect(() => {
     let cancelled = false;
@@ -107,9 +113,12 @@ export default function ExamAttemptScreen() {
       // Its mistakes aren't lost, though — the saved attempt is the source of the pool for
       // "exam from weak questions".
 
+      const finishedAt = Date.now();
+      setElapsed(finishedAt - startedAt.current);
+
       void saveAttempt({
         startedAt: startedAt.current,
-        finishedAt: Date.now(),
+        finishedAt,
         score: graded.score,
         passed: graded.passed,
         criticalFailed:
@@ -173,6 +182,37 @@ export default function ExamAttemptScreen() {
     [current, index, screenReader, profile],
   );
 
+  /**
+   * Leaving a started attempt asks first.
+   *
+   * The attempt lives only in memory, so navigating away destroys it — up to thirty minutes
+   * of a WPA paper, with no trace left in history. Everything else costly in this app has a
+   * guard: handing in an incomplete paper asks, deleting an attempt needs a long press,
+   * clearing the history has its own dialog. This was the only exception, and
+   * `predictiveBackGestureEnabled` makes an accidental edge swipe enough to trigger it.
+   *
+   * Sending the app to the background is deliberately *not* affected — the attempt survives
+   * `HOME` untouched, and it would be strange for the gentler interruption to be the one
+   * that asks questions.
+   *
+   * The guard lifts the moment the paper is graded: the summary is a normal screen to leave.
+   */
+  const navigation = useNavigation();
+  usePreventRemove(Boolean(exam) && !result, ({ data }) => {
+    Alert.alert(
+      'Przerwać egzamin?',
+      'Podejście przepadnie razem z odpowiedziami i czasem. W historii nie zostanie po nim ślad.',
+      [
+        { text: 'Wróć do egzaminu', style: 'cancel' },
+        {
+          text: 'Przerwij',
+          style: 'destructive',
+          onPress: () => navigation.dispatch(data.action),
+        },
+      ],
+    );
+  });
+
   const low = remaining <= 120;
 
   // A sighted user gets the clock turning red at two minutes left; that signal never reaches
@@ -209,7 +249,14 @@ export default function ExamAttemptScreen() {
   }, [exam, chosen, finish]);
 
   if (result && exam) {
-    return <ExamSummary result={result} profile={profile} onClose={() => router.back()} />;
+    return (
+      <ExamSummary
+        result={result}
+        profile={profile}
+        elapsed={elapsed}
+        onClose={() => router.back()}
+      />
+    );
   }
 
   if (!exam || !current) {
@@ -347,10 +394,13 @@ export default function ExamAttemptScreen() {
 function ExamSummary({
   result,
   profile,
+  elapsed,
   onClose,
 }: {
   result: ExamResult;
   profile: ExamProfile;
+  /** Milliseconds the attempt took. */
+  elapsed: number;
   onClose: () => void;
 }) {
   const theme = useTheme();
@@ -371,7 +421,13 @@ function ExamSummary({
     <ScrollView contentContainerStyle={[styles.body, { paddingBottom }]}>
       {/* The result is already saved, so going back loses nothing — without this button the
           only way out was scrolling through the whole mistake list to the very bottom. */}
-      <Stack.Screen options={{ title: 'Wynik' }} />
+      {/* The clock is cleared, not left to fall through from the attempt's own options. It
+          froze at whatever time was left when the paper went in, and sitting where a
+          countdown had been ticking for half an hour, it read as one still running. What
+          the reader wants here is the opposite number — how long it took — and that goes
+          into the card below, worded exactly as on the attempt screen reached from
+          history. */}
+      <Stack.Screen options={{ title: 'Wynik', headerRight: () => null }} />
 
       <Card>
         <Text style={[styles.score, { color: result.passed ? theme.good : theme.bad }]}>
@@ -387,6 +443,7 @@ function ExamSummary({
           </Text>
         ) : null}
         {result.passed ? <Muted>Taki wynik zalicza prawdziwy egzamin.</Muted> : null}
+        <Muted>Czas rozwiązywania: około {solvingMinutes(elapsed)} min.</Muted>
       </Card>
 
       {mistakes.length > 0 ? (
