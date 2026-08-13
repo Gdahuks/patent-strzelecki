@@ -51,7 +51,8 @@ export default function EgzaminScreen() {
   const [profileId, setProfileId] = useState<ExamProfileId>(PATENT_PROFILE.id);
   const profile = examProfile(profileId);
 
-  const [attempts, setAttempts] = useState<StoredAttempt[]>([]);
+  /** `null` until the profile's history has been read — never an empty list standing in for it. */
+  const [attempts, setAttempts] = useState<StoredAttempt[] | null>(null);
 
   /**
    * How many questions go into "egzamin z moich błędów" (exam from my mistakes).
@@ -75,13 +76,28 @@ export default function EgzaminScreen() {
 
   useFocusEffect(refresh);
 
+  /**
+   * Switching profiles drops what's on screen before the new read comes back.
+   *
+   * The database read is asynchronous, so the render between the tap and its result still
+   * holds the previous profile's attempts — under the new profile's heading. Left alone,
+   * the screen briefly lists a licence-exam paper as a WPA one. Clearing here means the
+   * gap shows nothing rather than something false.
+   */
+  const onSelectProfile = useCallback((id: ExamProfileId) => {
+    setProfileId(id);
+    setAttempts(null);
+    setMissedCount(0);
+  }, []);
+
   const onDelete = useCallback(
-    // The history is filtered by profile, so every attempt on screen belongs to the one the
-    // switch is showing — the denominator can come from there.
+    // The denominator comes from the attempt's own profile, never from the switch. The two
+    // agree once the read has landed, but not during it — and „18/10" in a confirmation
+    // dialog is exactly the kind of number nobody can un-see.
     (attempt: StoredAttempt) => {
       Alert.alert(
         'Usunąć to podejście?',
-        `${attempt.score}/${profile.questionCount} z ${formatDate(attempt.finishedAt)}. Tej operacji nie da się cofnąć.`,
+        `${attempt.score}/${examProfile(attempt.profile).questionCount} z ${formatDate(attempt.finishedAt)}. Tej operacji nie da się cofnąć.`,
         [
           { text: 'Anuluj', style: 'cancel' },
           {
@@ -94,7 +110,7 @@ export default function EgzaminScreen() {
         ],
       );
     },
-    [profile, refresh],
+    [refresh],
   );
 
   const onClearAll = useCallback(() => {
@@ -118,7 +134,7 @@ export default function EgzaminScreen() {
   }, [profile, refresh]);
 
   const criticalPool = pool.filter((question) => isCritical(question, profile)).length;
-  const passed = attempts.filter((attempt) => attempt.passed).length;
+  const passed = (attempts ?? []).filter((attempt) => attempt.passed).length;
   const minutes = profile.timeLimitSeconds / 60;
 
   return (
@@ -129,7 +145,7 @@ export default function EgzaminScreen() {
         <ModeSwitch
           options={AVAILABLE.map((entry) => ({ key: entry.id, label: entry.title }))}
           value={profile.id}
-          onChange={setProfileId}
+          onChange={onSelectProfile}
         />
       ) : null}
 
@@ -180,52 +196,63 @@ export default function EgzaminScreen() {
 
       <View style={styles.historyHeader}>
         <Text style={[styles.sectionTitle, { color: theme.text }]}>Historia</Text>
-        {attempts.length > 0 ? (
+        {attempts && attempts.length > 0 ? (
           <Muted>
             {passed} {plural(passed, 'zdane', 'zdane', 'zdanych')} z {attempts.length}
           </Muted>
         ) : null}
       </View>
 
-      {attempts.length === 0 ? (
+      {/* Nothing at all until the read lands — an empty list would otherwise claim, for a
+          frame, that this exam has never been taken. */}
+      {attempts === null ? null : attempts.length === 0 ? (
         <Muted>Jeszcze nie podchodziłeś do tego egzaminu.</Muted>
       ) : (
-        attempts.map((attempt) => (
-          <Card
-            key={attempt.id}
-            onPress={() => router.push(`/exam/result/${attempt.id}`)}
-            onLongPress={() => onDelete(attempt)}
-            longPressLabel="Usuń to podejście"
-            accessibilityLabel={
-              `${attempt.passed ? 'Zdane' : 'Niezdane'}, ${attempt.score} na ${profile.questionCount}`
-              + `${attempt.criticalFailed ? ', błąd w pytaniach krytycznych' : ''}`
-              + `, ${formatDate(attempt.finishedAt)}`
-            }
-          >
-            <View style={styles.attemptRow}>
-              <Text style={[styles.attemptScore, { color: attempt.passed ? theme.good : theme.bad }]}>
-                {attempt.score}/{profile.questionCount}
-              </Text>
-              <View style={styles.grow}>
-                {/* Neuter gender, as in the summary and in attempt history: this is about
-                    the attempt, and the masculine "Zdany" read like a verdict about someone
-                    else. */}
-                <Text style={[styles.attemptVerdict, { color: theme.text }]}>
-                  {attempt.passed ? 'Zdane' : 'Niezdane'}
+        attempts.map((attempt) => {
+          // Each row states its own scale, so a row can never be shown under a scale that
+          // isn't its own — not even in the render between switching profiles and the new
+          // history arriving.
+          const attemptProfile = examProfile(attempt.profile);
+
+          return (
+            <Card
+              key={attempt.id}
+              onPress={() => router.push(`/exam/result/${attempt.id}`)}
+              onLongPress={() => onDelete(attempt)}
+              longPressLabel="Usuń to podejście"
+              accessibilityLabel={
+                `${attempt.passed ? 'Zdane' : 'Niezdane'}, ${attempt.score} na ${attemptProfile.questionCount}`
+                + `${attempt.criticalFailed ? ', błąd w pytaniach krytycznych' : ''}`
+                + `, ${formatDate(attempt.finishedAt)}`
+              }
+            >
+              <View style={styles.attemptRow}>
+                <Text
+                  style={[styles.attemptScore, { color: attempt.passed ? theme.good : theme.bad }]}
+                >
+                  {attempt.score}/{attemptProfile.questionCount}
                 </Text>
-                {attempt.criticalFailed ? (
-                  <Text style={[styles.critical, { color: theme.critical }]}>
-                    błąd w pytaniach krytycznych
+                <View style={styles.grow}>
+                  {/* Neuter gender, as in the summary and in attempt history: this is about
+                      the attempt, and the masculine "Zdany" read like a verdict about someone
+                      else. */}
+                  <Text style={[styles.attemptVerdict, { color: theme.text }]}>
+                    {attempt.passed ? 'Zdane' : 'Niezdane'}
                   </Text>
-                ) : null}
+                  {attempt.criticalFailed ? (
+                    <Text style={[styles.critical, { color: theme.critical }]}>
+                      błąd w pytaniach krytycznych
+                    </Text>
+                  ) : null}
+                </View>
+                <Muted>{formatDate(attempt.finishedAt)}</Muted>
               </View>
-              <Muted>{formatDate(attempt.finishedAt)}</Muted>
-            </View>
-          </Card>
-        ))
+            </Card>
+          );
+        })
       )}
 
-      {attempts.length > 0 ? (
+      {attempts && attempts.length > 0 ? (
         <>
           <Muted>Przytrzymaj podejście, żeby je usunąć.</Muted>
           <Pressable
