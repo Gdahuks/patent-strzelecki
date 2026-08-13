@@ -14,7 +14,7 @@ import { AttemptAnswerCard } from '../../../src/components/AttemptAnswerCard';
 import { useBottomInset } from '../../../src/components/safeArea';
 import { Card, Muted } from '../../../src/components/ui';
 import { type AttemptDetail, attemptDetail, deleteAttempt } from '../../../src/db/database';
-import { examProfile } from '../../../src/engine/exam';
+import { examProfile, solvingMinutes } from '../../../src/engine/exam';
 import { useTheme } from '../../../src/theme';
 
 export default function AttemptScreen() {
@@ -70,7 +70,7 @@ export default function AttemptScreen() {
   const profile = examProfile(attempt.profile);
   const mistakes = attempt.answers.filter((answer) => !answer.wasCorrect);
   const correct = attempt.answers.filter((answer) => answer.wasCorrect);
-  const minutes = Math.max(1, Math.round((attempt.finishedAt - attempt.startedAt) / 60000));
+  const minutes = solvingMinutes(attempt.finishedAt - attempt.startedAt);
 
   return (
     <ScrollView contentContainerStyle={[styles.body, { paddingBottom }]}>

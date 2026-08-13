@@ -14,6 +14,7 @@ import {
   formatRemaining,
   gradeExam,
   isCritical,
+  solvingMinutes,
 } from './exam';
 
 const QUESTION_COUNT = PATENT_PROFILE.questionCount;
@@ -459,6 +460,21 @@ describe('examProfile', () => {
     assert.equal(examProfile(undefined), PATENT_PROFILE);
     assert.equal(examProfile(null), PATENT_PROFILE);
     assert.equal(examProfile('cokolwiek'), PATENT_PROFILE);
+  });
+});
+
+describe('solvingMinutes', () => {
+  it('rounds to whole minutes', () => {
+    assert.equal(solvingMinutes(9 * 60_000), 9);
+    assert.equal(solvingMinutes(9 * 60_000 + 20_000), 9);
+    assert.equal(solvingMinutes(9 * 60_000 + 40_000), 10);
+  });
+
+  it('never falls below one minute', () => {
+    // A paper handed in immediately is still "about a minute" — „0 min" reads like a
+    // measurement that failed rather than a fast exam.
+    assert.equal(solvingMinutes(40_000), 1);
+    assert.equal(solvingMinutes(0), 1);
   });
 });
 

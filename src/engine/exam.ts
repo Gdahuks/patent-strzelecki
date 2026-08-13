@@ -265,6 +265,17 @@ export function gradeExam(
   };
 }
 
+/**
+ * How long an attempt took, in whole minutes — the „Czas rozwiązywania" line.
+ *
+ * Never below one: a paper handed in after forty seconds is still "about a minute", while
+ * „0 min" reads like a measurement that failed. Both summaries use this — the one shown
+ * straight after the exam and the one reached from history — so the two can't drift apart.
+ */
+export function solvingMinutes(milliseconds: number): number {
+  return Math.max(1, Math.round(milliseconds / 60000));
+}
+
 export function formatRemaining(seconds: number): string {
   const clamped = Math.max(0, Math.floor(seconds));
   const minutes = Math.floor(clamped / 60);
