@@ -18,7 +18,10 @@ import { useTheme } from '../../src/theme';
 interface Row {
   slug: string;
   title: string;
-  /** Set's question ids — for the review screen and for resetting without re-querying the database. */
+  /**
+   * Set's question ids — for the review screen and for resetting without re-querying the
+   * database.
+   */
   ids: string[];
   count: number;
   /** 0..1 — how far along toward mastery; for the percentage label. */
@@ -98,6 +101,11 @@ export default function CwiczeniaScreen() {
       return () => {
         cancelled = true;
       };
+      // `reload` is deliberately here although the body never reads it: bumping the counter
+      // is the whole mechanism for recomputing the list in place after a set is reset. The
+      // rule can only see that it's unused inside, not that being a dependency is its only
+      // job.
+      // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [mode, levels, reload]),
   );
 

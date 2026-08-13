@@ -296,7 +296,10 @@ describe('buildPool', () => {
 describe('gradeExam', () => {
   const exam = drawExam(pool(50, 50), PATENT_PROFILE, seeded(42));
 
-  function answerAll(correctCount: number, wrongIndexes: number[] = []): Map<string, Letter | null> {
+  function answerAll(
+    correctCount: number,
+    wrongIndexes: number[] = [],
+  ): Map<string, Letter | null> {
     const chosen = new Map<string, Letter | null>();
     let given = 0;
     exam.forEach((entry, index) => {

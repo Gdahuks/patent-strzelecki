@@ -112,7 +112,8 @@ export default function ExamAttemptScreen() {
         finishedAt: Date.now(),
         score: graded.score,
         passed: graded.passed,
-        criticalFailed: graded.failedOnCritical || graded.answers.some((a) => a.critical && !a.wasCorrect),
+        criticalFailed:
+          graded.failedOnCritical || graded.answers.some((a) => a.critical && !a.wasCorrect),
         answers: graded.answers,
         profile: profile.id,
       });

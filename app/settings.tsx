@@ -17,7 +17,10 @@ import { REPORT_ADDRESS, reportMailto, versionLine } from '../src/engine/report'
 import { useSettings } from '../src/settings/SettingsContext';
 import { useTheme } from '../src/theme';
 
-/** The course authors' fundraiser. A constant, since it's not part of the content — the bundle knows nothing about it. */
+/**
+ * The course authors' fundraiser. A constant, since it's not part of the content — the
+ * bundle knows nothing about it.
+ */
 const DONATION_ADDRESS = 'https://braterstwo.eu/1procent';
 
 /**

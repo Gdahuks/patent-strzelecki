@@ -53,7 +53,9 @@ export function ExamStrip({
   const vertical = rows.length > 1 ? ROW_GAP / 2 : 10;
 
   return (
-    <View style={[styles.strip, { backgroundColor: theme.surface, borderBottomColor: theme.border }]}>
+    <View
+      style={[styles.strip, { backgroundColor: theme.surface, borderBottomColor: theme.border }]}
+    >
       {rows.map((row, rowIndex) => (
         <View key={rowIndex} style={styles.row}>
           {row.map((index) => {

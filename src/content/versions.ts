@@ -344,7 +344,10 @@ interface Removed {
   at: number;
   /** Whether this wording has a replacement — i.e. whether the bracket had a matching pair. */
   paired: boolean;
-  /** The unit's number: the content of the bracket's first part, since it covers the heading too. */
+  /**
+   * The unit's number: the content of the bracket's first part, since it covers the heading
+   * too.
+   */
   number: string;
 }
 

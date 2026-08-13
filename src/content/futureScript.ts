@@ -60,7 +60,8 @@ export function parseFutureMessage(raw: string): FuturePassage | null {
 
     const { od, tresc } = parsed as { od?: unknown; tresc?: unknown };
     if (typeof od !== 'string' || typeof tresc !== 'string') return null;
-    // An empty sheet is worse than no sheet at all: it looks like a provision deleted for no reason.
+    // An empty sheet is worse than no sheet at all: it looks like a provision deleted for
+    // no reason.
     if (!od || !tresc) return null;
 
     return { from: od, content: tresc };

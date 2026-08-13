@@ -92,7 +92,10 @@ export default function QuestionListScreen() {
     }));
   }, [questions, cards, levels]);
 
-  /** The write goes to the database, and the card map is swapped so the row switches section right away. */
+  /**
+   * The write goes to the database, and the card map is swapped so the row switches section
+   * right away.
+   */
   const apply = useCallback(
     (questionId: string, next: Card | null) => {
       setCards((previous) => {
@@ -351,7 +354,12 @@ const styles = StyleSheet.create({
   details: { gap: 7, marginTop: 4, marginLeft: 17 },
   answer: { fontSize: 14, lineHeight: 20 },
   actions: { flexDirection: 'row', gap: 8, marginTop: 2, flexWrap: 'wrap' },
-  action: { borderRadius: 8, borderWidth: StyleSheet.hairlineWidth, paddingHorizontal: 11, paddingVertical: 7 },
+  action: {
+    borderRadius: 8,
+    borderWidth: StyleSheet.hairlineWidth,
+    paddingHorizontal: 11,
+    paddingVertical: 7,
+  },
   actionLabel: { fontSize: 13, fontWeight: '600' },
   pressed: { opacity: 0.65 },
 });

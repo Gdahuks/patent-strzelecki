@@ -349,7 +349,10 @@ export default function ActScreen() {
 
       {showIndex ? (
         <FlatList
-          style={[styles.index, { backgroundColor: theme.surface, borderBottomColor: theme.border }]}
+          style={[
+            styles.index,
+            { backgroundColor: theme.surface, borderBottomColor: theme.border },
+          ]}
           data={act.index}
           keyExtractor={(entry) => entry.ref}
           keyboardShouldPersistTaps="handled"

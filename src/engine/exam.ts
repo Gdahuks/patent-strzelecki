@@ -95,7 +95,10 @@ export interface ExamAnswer {
 export interface ExamResult {
   score: number;
   passed: boolean;
-  /** Whether the failure comes from a mistake in the critical questions despite a score above the threshold. */
+  /**
+   * Whether the failure comes from a mistake in the critical questions despite a score above
+   * the threshold.
+   */
   failedOnCritical: boolean;
   answers: ExamAnswer[];
 }

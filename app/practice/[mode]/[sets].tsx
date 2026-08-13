@@ -334,11 +334,12 @@ export default function ExerciseScreen() {
         }, 550);
       }
     },
+    // No `currentId` here: the body doesn't touch it, and `commit` already carries it —
+    // listing it again only re-created this callback a second time on every question.
     [
       question,
       reviewing,
       picked,
-      currentId,
       commit,
       advance,
       cancelPendingAdvance,
@@ -533,9 +534,11 @@ export default function ExerciseScreen() {
         {mode === 'test' || reviewing
           ? shownOrder.map((letter, index) => {
               const isCorrect = letter === question.correct;
-              // In the preview, `picked` refers to the current question, not the one being reviewed.
+              // In the preview, `picked` refers to the current question, not the one being
+              // reviewed.
               const chosen = (reviewing ? shownPick : picked) === letter;
-              // In the preview we show the correct answer right away — that's exactly what it's there to read.
+              // In the preview we show the correct answer right away — that's exactly what
+              // it's there to read.
               const showVerdict = reviewing || picked !== null;
 
               const background = !showVerdict
@@ -668,7 +671,9 @@ export default function ExerciseScreen() {
       ) : null}
 
       {canGoBack || showNext ? (
-        <View style={[styles.nav, { borderTopColor: theme.border, backgroundColor: theme.surface }]}>
+        <View
+          style={[styles.nav, { borderTopColor: theme.border, backgroundColor: theme.surface }]}
+        >
           <Pressable
             disabled={!canGoBack}
             onPress={onBack}
