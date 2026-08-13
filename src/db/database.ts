@@ -315,7 +315,7 @@ export async function weakQuestionIds(mode: PracticeMode, maxBucket = 0): Promis
  */
 /** Clears the spaced-repetition buckets for all questions. Doesn't touch reading or exams. */
 /**
- * Questions whose latest exam answer was wrong.
+ * Questions whose latest answer in this profile's exams was wrong.
  *
  * The exam doesn't touch practice progress, so its mistakes never land in the buckets —
  * and it would be a shame to lose them when drawing an "exam from the weak-question pool".
@@ -323,11 +323,21 @@ export async function weakQuestionIds(mode: PracticeMode, maxBucket = 0): Promis
  * `latestMisses`, so it can be tested without a database. No window on the number of
  * attempts: the table is small, and a correct answer removes the question from the pool
  * either way.
+ *
+ * **Scoped to one profile**, like the history above it. It wasn't at first: every attempt
+ * counted, and the result was narrowed afterwards to the profile's question pool — so a
+ * question missed on the licence exam surfaced under WPA whenever it happened to sit on the
+ * course's WPA list. A freshly opened WPA profile then said „Jeszcze nie podchodziłeś do
+ * tego egzaminu" and offered an exam built from mistakes in it, on the same screen.
+ *
+ * The cost is deliberate: the same question can need fixing separately in each exam. That's
+ * how flashcards and the ABC quiz already work — separate tracks, separate counters.
  */
-export async function missedQuestionIds(): Promise<string[]> {
+export async function missedQuestionIds(profile: ExamProfileId): Promise<string[]> {
   const database = await db();
   const rows = await database.getAllAsync<{ answers: string }>(
-    'SELECT answers FROM exam_attempts ORDER BY finished_at DESC',
+    'SELECT answers FROM exam_attempts WHERE profile = ? ORDER BY finished_at DESC',
+    [profile],
   );
 
   const attempts: AttemptAnswer[][] = [];
