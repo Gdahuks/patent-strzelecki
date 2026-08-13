@@ -32,7 +32,7 @@ import {
   examProfile,
   formatRemaining,
   gradeExam,
-  solvingMinutes,
+  solvingTime,
   unansweredNumbers,
 } from '../../src/engine/exam';
 import { plural } from '../../src/engine/plural';
@@ -65,8 +65,13 @@ export default function ExamAttemptScreen() {
   const [chosen, setChosen] = useState<Map<string, Letter | null>>(new Map());
   const [remaining, setRemaining] = useState(profile.timeLimitSeconds);
   const [result, setResult] = useState<ExamResult | null>(null);
-  /** How long the finished attempt took — frozen at hand-in, so re-renders can't grow it. */
-  const [elapsed, setElapsed] = useState(0);
+  /**
+   * When the paper went in. A ref, not state, for two reasons: re-rendering the summary must
+   * not grow the duration, and a second state update would have to be flushed in the same
+   * batch as `result` to be there on the summary's first render. A ref is written
+   * synchronously, so it is always ready by the time `setResult` causes that render.
+   */
+  const finishedAt = useRef(0);
 
   useEffect(() => {
     let cancelled = false;
@@ -106,6 +111,7 @@ export default function ExamAttemptScreen() {
       finished.current = true;
 
       const graded = gradeExam(exam, answers, profile);
+      finishedAt.current = Date.now();
       setResult(graded);
 
       // The exam doesn't touch practice progress: it's a measurement, not training, and a
@@ -113,12 +119,9 @@ export default function ExamAttemptScreen() {
       // Its mistakes aren't lost, though — the saved attempt is the source of the pool for
       // "exam from weak questions".
 
-      const finishedAt = Date.now();
-      setElapsed(finishedAt - startedAt.current);
-
       void saveAttempt({
         startedAt: startedAt.current,
-        finishedAt,
+        finishedAt: finishedAt.current,
         score: graded.score,
         passed: graded.passed,
         criticalFailed:
@@ -253,7 +256,7 @@ export default function ExamAttemptScreen() {
       <ExamSummary
         result={result}
         profile={profile}
-        elapsed={elapsed}
+        elapsed={finishedAt.current - startedAt.current}
         onClose={() => router.back()}
       />
     );
@@ -443,7 +446,7 @@ function ExamSummary({
           </Text>
         ) : null}
         {result.passed ? <Muted>Taki wynik zalicza prawdziwy egzamin.</Muted> : null}
-        <Muted>Czas rozwiązywania: około {solvingMinutes(elapsed)} min.</Muted>
+        <Muted>Czas rozwiązywania: {solvingTime(elapsed)}</Muted>
       </Card>
 
       {mistakes.length > 0 ? (
