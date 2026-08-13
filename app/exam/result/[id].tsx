@@ -14,7 +14,7 @@ import { AttemptAnswerCard } from '../../../src/components/AttemptAnswerCard';
 import { useBottomInset } from '../../../src/components/safeArea';
 import { Card, Muted } from '../../../src/components/ui';
 import { type AttemptDetail, attemptDetail, deleteAttempt } from '../../../src/db/database';
-import { PASS_THRESHOLD, QUESTION_COUNT } from '../../../src/engine/exam';
+import { examProfile } from '../../../src/engine/exam';
 import { useTheme } from '../../../src/theme';
 
 export default function AttemptScreen() {
@@ -65,6 +65,9 @@ export default function AttemptScreen() {
     );
   }
 
+  // The profile is read off the attempt, not off today's screen: it says how many questions
+  // this score is out of and where the pass mark was, and both differ between the two exams.
+  const profile = examProfile(attempt.profile);
   const mistakes = attempt.answers.filter((answer) => !answer.wasCorrect);
   const correct = attempt.answers.filter((answer) => answer.wasCorrect);
   const minutes = Math.max(1, Math.round((attempt.finishedAt - attempt.startedAt) / 60000));
@@ -84,11 +87,11 @@ export default function AttemptScreen() {
 
       <Card>
         <Text style={[styles.score, { color: attempt.passed ? theme.good : theme.bad }]}>
-          {attempt.score}/{QUESTION_COUNT} — {attempt.passed ? 'zdane' : 'niezdane'}
+          {attempt.score}/{profile.questionCount} — {attempt.passed ? 'zdane' : 'niezdane'}
         </Text>
         {/* The condition allows a score equal to the threshold, so „powyżej progu" (above
             the threshold) used to be false. */}
-        {attempt.criticalFailed && attempt.score >= PASS_THRESHOLD ? (
+        {attempt.criticalFailed && attempt.score >= profile.passThreshold ? (
           <Text style={{ color: theme.critical, fontSize: 14 }}>
             Wynik wystarczał na zaliczenie, ale błąd padł w pytaniach krytycznych — to niezdanie.
           </Text>

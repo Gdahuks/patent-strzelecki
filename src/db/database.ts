@@ -9,7 +9,7 @@
 
 import * as SQLite from 'expo-sqlite';
 
-import { latestMisses } from '../engine/exam';
+import { type ExamProfileId, latestMisses } from '../engine/exam';
 import type { Card } from '../engine/leitner';
 
 const DATABASE = 'patent.db';
@@ -72,6 +72,51 @@ async function migrateProgressToModes(database: SQLite.SQLiteDatabase): Promise<
   `);
 }
 
+/**
+ * Splits attempts into exam profiles.
+ *
+ * Every attempt taken before the WPA profile existed was a licence exam, so `'patent'` is
+ * a fact about those rows, not a guess. It has to be written down, though: without it the
+ * history can't tell „9/10" from „18/20", and the result screen wouldn't know how many
+ * questions the score is out of.
+ *
+ * The table is rebuilt rather than extended with `ALTER TABLE ADD COLUMN … DEFAULT`. A
+ * default on the column is a standing rule, and this is a one-time statement about old
+ * rows: with the default in place, a future insert that forgets the profile would be
+ * silently recorded as a licence exam instead of failing. Here the value appears in the
+ * `INSERT ... SELECT`, where it can only ever touch the rows being migrated, and the
+ * resulting schema is identical to the one a fresh install gets.
+ */
+async function migrateAttemptsToProfiles(database: SQLite.SQLiteDatabase): Promise<void> {
+  const columns = await database.getAllAsync<{ name: string }>(
+    "SELECT name FROM pragma_table_info('exam_attempts')",
+  );
+  if (columns.length === 0 || columns.some((column) => column.name === 'profile')) return;
+
+  // Ids are carried over explicitly: the result screen is reached by id, so history links
+  // saved anywhere else would break if the rebuild renumbered the attempts.
+  await database.execAsync(`
+    BEGIN;
+    ALTER TABLE exam_attempts RENAME TO exam_attempts_bez_profilu;
+    CREATE TABLE exam_attempts (
+      id          INTEGER PRIMARY KEY AUTOINCREMENT,
+      started_at  INTEGER NOT NULL,
+      finished_at INTEGER NOT NULL,
+      score       INTEGER NOT NULL,
+      passed      INTEGER NOT NULL,
+      critical_failed INTEGER NOT NULL,
+      answers     TEXT NOT NULL,
+      profile     TEXT NOT NULL
+    );
+    INSERT INTO exam_attempts
+        (id, started_at, finished_at, score, passed, critical_failed, answers, profile)
+      SELECT id, started_at, finished_at, score, passed, critical_failed, answers, 'patent'
+      FROM exam_attempts_bez_profilu;
+    DROP TABLE exam_attempts_bez_profilu;
+    COMMIT;
+  `);
+}
+
 export function db(): Promise<SQLite.SQLiteDatabase> {
   // A failed open must not be memoized forever — otherwise one startup error would
   // cripple the app until the next restart. On rejection we clear the memoized promise,
@@ -113,11 +158,13 @@ async function openDatabase(): Promise<SQLite.SQLiteDatabase> {
       score       INTEGER NOT NULL,
       passed      INTEGER NOT NULL,
       critical_failed INTEGER NOT NULL,
-      answers     TEXT NOT NULL
+      answers     TEXT NOT NULL,
+      profile     TEXT NOT NULL
     );
   `);
 
   await migrateProgressToModes(handle);
+  await migrateAttemptsToProfiles(handle);
   return handle;
 }
 
@@ -182,6 +229,7 @@ export interface StoredAttempt {
   score: number;
   passed: boolean;
   criticalFailed: boolean;
+  profile: ExamProfileId;
 }
 
 export async function saveAttempt(attempt: {
@@ -191,11 +239,13 @@ export async function saveAttempt(attempt: {
   passed: boolean;
   criticalFailed: boolean;
   answers: unknown;
+  profile: ExamProfileId;
 }): Promise<void> {
   const database = await db();
   await database.runAsync(
-    `INSERT INTO exam_attempts (started_at, finished_at, score, passed, critical_failed, answers)
-     VALUES (?, ?, ?, ?, ?, ?)`,
+    `INSERT INTO exam_attempts
+       (started_at, finished_at, score, passed, critical_failed, answers, profile)
+     VALUES (?, ?, ?, ?, ?, ?, ?)`,
     [
       attempt.startedAt,
       attempt.finishedAt,
@@ -203,11 +253,16 @@ export async function saveAttempt(attempt: {
       attempt.passed ? 1 : 0,
       attempt.criticalFailed ? 1 : 0,
       JSON.stringify(attempt.answers),
+      attempt.profile,
     ],
   );
 }
 
-export async function recentAttempts(limit = 20): Promise<StoredAttempt[]> {
+/** History of one exam profile — the two are never mixed, their scales differ. */
+export async function recentAttempts(
+  profile: ExamProfileId,
+  limit = 20,
+): Promise<StoredAttempt[]> {
   const database = await db();
   const rows = await database.getAllAsync<{
     id: number;
@@ -215,10 +270,11 @@ export async function recentAttempts(limit = 20): Promise<StoredAttempt[]> {
     score: number;
     passed: number;
     critical_failed: number;
+    profile: string;
   }>(
-    `SELECT id, finished_at, score, passed, critical_failed
-     FROM exam_attempts ORDER BY finished_at DESC LIMIT ?`,
-    [limit],
+    `SELECT id, finished_at, score, passed, critical_failed, profile
+     FROM exam_attempts WHERE profile = ? ORDER BY finished_at DESC LIMIT ?`,
+    [profile, limit],
   );
 
   return rows.map((row) => ({
@@ -227,6 +283,7 @@ export async function recentAttempts(limit = 20): Promise<StoredAttempt[]> {
     score: row.score,
     passed: row.passed === 1,
     criticalFailed: row.critical_failed === 1,
+    profile: row.profile as ExamProfileId,
   }));
 }
 
@@ -294,7 +351,19 @@ export async function deleteAttempt(id: number): Promise<void> {
   await database.runAsync('DELETE FROM exam_attempts WHERE id = ?', [id]);
 }
 
-export async function clearAttempts(): Promise<void> {
+/**
+ * Clears the history of one profile.
+ *
+ * Deliberately not the whole table: the exam screen shows one profile at a time, and a
+ * button that also wiped attempts the screen isn't showing would destroy them unseen.
+ */
+export async function clearAttempts(profile: ExamProfileId): Promise<void> {
+  const database = await db();
+  await database.runAsync('DELETE FROM exam_attempts WHERE profile = ?', [profile]);
+}
+
+/** Every profile at once — for the wipes in Settings, which promise exactly that. */
+export async function clearAllAttempts(): Promise<void> {
   const database = await db();
   await database.runAsync('DELETE FROM exam_attempts');
 }
@@ -321,6 +390,7 @@ export async function attemptDetail(id: number): Promise<AttemptDetail | null> {
     passed: number;
     critical_failed: number;
     answers: string;
+    profile: string;
   }>('SELECT * FROM exam_attempts WHERE id = ?', [id]);
 
   if (!row) return null;
@@ -340,6 +410,7 @@ export async function attemptDetail(id: number): Promise<AttemptDetail | null> {
     score: row.score,
     passed: row.passed === 1,
     criticalFailed: row.critical_failed === 1,
+    profile: row.profile as ExamProfileId,
     answers,
   };
 }

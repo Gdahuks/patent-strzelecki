@@ -7,7 +7,7 @@ import { useBottomInset } from '../src/components/safeArea';
 import { Card, Muted } from '../src/components/ui';
 import { openInAppBrowser } from '../src/content/openSource';
 import { content } from '../src/content/store';
-import { clearAttempts, resetAllProgress } from '../src/db/database';
+import { clearAllAttempts, resetAllProgress } from '../src/db/database';
 import { resetAllReading } from '../src/db/reading';
 import { levelsLabel } from '../src/db/settings';
 import { formatDay } from '../src/engine/dates';
@@ -257,7 +257,7 @@ export default function SettingsScreen() {
               'Wyczyścić historię egzaminów?',
               'Znikną wszystkie zapisane podejścia.',
               'Wyczyść',
-              clearAttempts,
+              clearAllAttempts,
             )
           }
           accessibilityRole="button"
@@ -275,7 +275,7 @@ export default function SettingsScreen() {
               async () => {
                 await resetAllProgress();
                 await resetAllReading();
-                await clearAttempts();
+                await clearAllAttempts();
               },
             )
           }
