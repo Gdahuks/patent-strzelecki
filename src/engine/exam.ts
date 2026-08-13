@@ -266,14 +266,22 @@ export function gradeExam(
 }
 
 /**
- * How long an attempt took, in whole minutes — the „Czas rozwiązywania" line.
+ * How long an attempt took, as `M:SS` — the „Czas rozwiązywania" line.
  *
- * Never below one: a paper handed in after forty seconds is still "about a minute", while
- * „0 min" reads like a measurement that failed. Both summaries use this — the one shown
- * straight after the exam and the one reached from history — so the two can't drift apart.
+ * Exact, not "about N minutes". The app knows this to the millisecond and already formats a
+ * clock for the countdown, so rounding threw away information for nothing — and the rounding
+ * had a floor of one minute, which turned a paper handed in after forty seconds into a lie.
+ *
+ * This is **wall-clock time**, not time on the exam's own clock: the countdown stops while
+ * the app sits in the background, so an attempt can span more wall-clock time than the limit
+ * allows. Hence the bare duration, never „18:42 z 20:00" — that comparison would sooner or
+ * later read „34:10 z 20:00".
+ *
+ * Both summaries use this — the one right after the exam and the one reached from history —
+ * so the two can't drift apart.
  */
-export function solvingMinutes(milliseconds: number): number {
-  return Math.max(1, Math.round(milliseconds / 60000));
+export function solvingTime(milliseconds: number): string {
+  return formatRemaining(milliseconds / 1000);
 }
 
 export function formatRemaining(seconds: number): string {

@@ -14,7 +14,7 @@ import {
   formatRemaining,
   gradeExam,
   isCritical,
-  solvingMinutes,
+  solvingTime,
 } from './exam';
 
 const QUESTION_COUNT = PATENT_PROFILE.questionCount;
@@ -463,18 +463,23 @@ describe('examProfile', () => {
   });
 });
 
-describe('solvingMinutes', () => {
-  it('rounds to whole minutes', () => {
-    assert.equal(solvingMinutes(9 * 60_000), 9);
-    assert.equal(solvingMinutes(9 * 60_000 + 20_000), 9);
-    assert.equal(solvingMinutes(9 * 60_000 + 40_000), 10);
+describe('solvingTime', () => {
+  it('reports minutes and seconds exactly', () => {
+    assert.equal(solvingTime(9 * 60_000), '9:00');
+    assert.equal(solvingTime(9 * 60_000 + 20_000), '9:20');
+    assert.equal(solvingTime(3 * 60_000 + 5_000), '3:05');
   });
 
-  it('never falls below one minute', () => {
-    // A paper handed in immediately is still "about a minute" — „0 min" reads like a
-    // measurement that failed rather than a fast exam.
-    assert.equal(solvingMinutes(40_000), 1);
-    assert.equal(solvingMinutes(0), 1);
+  it('keeps a fast attempt honest instead of rounding it up to a minute', () => {
+    // The rounded version had a floor of one minute, so forty seconds became „około 1 min".
+    assert.equal(solvingTime(40_000), '0:40');
+    assert.equal(solvingTime(0), '0:00');
+  });
+
+  it('does not cap at the exam limit', () => {
+    // Wall-clock time, and the countdown stops in the background, so an attempt can span
+    // more than the limit allows.
+    assert.equal(solvingTime(75 * 60_000 + 3_000), '75:03');
   });
 });
 
