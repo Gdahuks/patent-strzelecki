@@ -7,7 +7,7 @@ import { useBottomInset } from '../src/components/safeArea';
 import { Card, Muted } from '../src/components/ui';
 import { openInAppBrowser } from '../src/content/openSource';
 import { content } from '../src/content/store';
-import { clearAttempts, resetAllProgress } from '../src/db/database';
+import { clearAllAttempts, resetAllProgress } from '../src/db/database';
 import { resetAllReading } from '../src/db/reading';
 import { levelsLabel } from '../src/db/settings';
 import { formatDay } from '../src/engine/dates';
@@ -17,7 +17,10 @@ import { REPORT_ADDRESS, reportMailto, versionLine } from '../src/engine/report'
 import { useSettings } from '../src/settings/SettingsContext';
 import { useTheme } from '../src/theme';
 
-/** The course authors' fundraiser. A constant, since it's not part of the content — the bundle knows nothing about it. */
+/**
+ * The course authors' fundraiser. A constant, since it's not part of the content — the
+ * bundle knows nothing about it.
+ */
 const DONATION_ADDRESS = 'https://braterstwo.eu/1procent';
 
 /**
@@ -257,7 +260,7 @@ export default function SettingsScreen() {
               'Wyczyścić historię egzaminów?',
               'Znikną wszystkie zapisane podejścia.',
               'Wyczyść',
-              clearAttempts,
+              clearAllAttempts,
             )
           }
           accessibilityRole="button"
@@ -275,7 +278,7 @@ export default function SettingsScreen() {
               async () => {
                 await resetAllProgress();
                 await resetAllReading();
-                await clearAttempts();
+                await clearAllAttempts();
               },
             )
           }

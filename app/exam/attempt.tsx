@@ -17,18 +17,16 @@ import { ExamStrip } from '../../src/components/ExamStrip';
 import { positionLabel } from '../../src/content/answers';
 import { useBottomInset } from '../../src/components/safeArea';
 import { Button, Card, Muted } from '../../src/components/ui';
-import { content } from '../../src/content/store';
+import { profileMisses, profileQuestions } from '../../src/content/examPool';
 import type { Letter } from '../../src/content/types';
 import { missedQuestionIds, saveAttempt } from '../../src/db/database';
 import {
-  CRITICAL_COUNT,
+  type ExamProfile,
   type ExamQuestion,
   type ExamResult,
-  PASS_THRESHOLD,
-  QUESTION_COUNT,
-  TIME_LIMIT_SECONDS,
   buildPool,
   drawExam,
+  examProfile,
   formatRemaining,
   gradeExam,
   unansweredNumbers,
@@ -44,8 +42,9 @@ export default function ExamAttemptScreen() {
   // phone with three-button navigation. See `useBottomInset`.
   const paddingBottom = useBottomInset(14);
 
-  const { pool } = useLocalSearchParams<{ pool?: string }>();
+  const { pool, profile: profileId } = useLocalSearchParams<{ pool?: string; profile?: string }>();
   const fromWeak = pool === 'weak';
+  const profile = examProfile(profileId);
 
   const startedAt = useRef(Date.now());
   /**
@@ -60,40 +59,47 @@ export default function ExamAttemptScreen() {
   const [exam, setExam] = useState<ExamQuestion[] | null>(null);
   const [index, setIndex] = useState(0);
   const [chosen, setChosen] = useState<Map<string, Letter | null>>(new Map());
-  const [remaining, setRemaining] = useState(TIME_LIMIT_SECONDS);
+  const [remaining, setRemaining] = useState(profile.timeLimitSeconds);
   const [result, setResult] = useState<ExamResult | null>(null);
 
   useEffect(() => {
     let cancelled = false;
 
     void (async () => {
+      const base = profileQuestions(profile);
       // The pool is drawn exclusively from exam mistakes. Flashcards, the ABC quiz and the
       // exam are three independent progress tracks — mixing in questions flagged as needing
       // work from practice mode would blend the measurement with the training and desync the
       // counter next to the button from what actually goes into the draw. `buildPool` stays
-      // in the mix because there can be fewer than ten mistakes, and none of them has to be
-      // critical.
+      // in the mix because there can be fewer mistakes than the paper has questions, and none
+      // of them has to be critical.
+      //
+      // The mistakes are narrowed to this profile's own pool, which is what keeps the two
+      // exams apart without a second table: a question missed on the licence exam but absent
+      // from the WPA list can't come back on a WPA paper, while one missed on a WPA paper
+      // feeds the licence exam normally, because there it belongs to the scope.
       const questions = fromWeak
-        ? buildPool(content.questionsByIds(await missedQuestionIds()), content.questions)
-        : content.questions;
+        ? buildPool(profileMisses(await missedQuestionIds(), base), base, profile)
+        : base;
       if (cancelled) return;
 
       startedAt.current = Date.now();
       finished.current = false;
-      setExam(drawExam(questions));
+      setRemaining(profile.timeLimitSeconds);
+      setExam(drawExam(questions, profile));
     })();
 
     return () => {
       cancelled = true;
     };
-  }, [fromWeak]);
+  }, [fromWeak, profile]);
 
   const finish = useCallback(
     (answers: Map<string, Letter | null>) => {
       if (!exam || finished.current) return;
       finished.current = true;
 
-      const graded = gradeExam(exam, answers);
+      const graded = gradeExam(exam, answers, profile);
       setResult(graded);
 
       // The exam doesn't touch practice progress: it's a measurement, not training, and a
@@ -106,11 +112,13 @@ export default function ExamAttemptScreen() {
         finishedAt: Date.now(),
         score: graded.score,
         passed: graded.passed,
-        criticalFailed: graded.failedOnCritical || graded.answers.some((a) => a.critical && !a.wasCorrect),
+        criticalFailed:
+          graded.failedOnCritical || graded.answers.some((a) => a.critical && !a.wasCorrect),
         answers: graded.answers,
+        profile: profile.id,
       });
     },
-    [exam],
+    [exam, profile],
   );
 
   useEffect(() => {
@@ -156,13 +164,13 @@ export default function ExamAttemptScreen() {
       // confirming what actually got selected — and the exam has no verdict to reveal that
       // later. "Dalej" is always present in the bar, so nothing disappears: moving on becomes
       // a deliberate tap instead.
-      if (index < QUESTION_COUNT - 1 && !screenReader) {
+      if (index < profile.questionCount - 1 && !screenReader) {
         setTimeout(() => {
           setIndex((value) => (value === index ? value + 1 : value));
         }, 220);
       }
     },
-    [current, index, screenReader],
+    [current, index, screenReader, profile],
   );
 
   const low = remaining <= 120;
@@ -201,13 +209,15 @@ export default function ExamAttemptScreen() {
   }, [exam, chosen, finish]);
 
   if (result && exam) {
-    return <ExamSummary result={result} onClose={() => router.back()} />;
+    return <ExamSummary result={result} profile={profile} onClose={() => router.back()} />;
   }
 
   if (!exam || !current) {
     return (
       <View style={[styles.loading, { backgroundColor: theme.bg }]}>
-        <Stack.Screen options={{ title: fromWeak ? 'Egzamin z moich błędów' : 'Egzamin' }} />
+        <Stack.Screen
+          options={{ title: fromWeak ? 'Egzamin z moich błędów' : `Egzamin — ${profile.title}` }}
+        />
         <ActivityIndicator color={theme.accent} />
       </View>
     );
@@ -217,7 +227,7 @@ export default function ExamAttemptScreen() {
     <View style={[styles.screen, { backgroundColor: theme.bg }]}>
       <Stack.Screen
         options={{
-          title: `Pytanie ${index + 1} z ${QUESTION_COUNT}`,
+          title: `Pytanie ${index + 1} z ${profile.questionCount}`,
           headerRight: () => (
             <Text
               style={{ color: low ? theme.bad : theme.muted, fontSize: 16, fontWeight: '600' }}
@@ -233,7 +243,7 @@ export default function ExamAttemptScreen() {
       />
 
       <ExamStrip
-        count={QUESTION_COUNT}
+        count={profile.questionCount}
         answered={(position) => Boolean(chosen.get(exam[position]?.question.id ?? ''))}
         current={index}
         onJump={setIndex}
@@ -305,12 +315,12 @@ export default function ExamAttemptScreen() {
 
         <Text
           style={[styles.counter, { color: theme.muted }]}
-          accessibilityLabel={`Odpowiedzi: ${answeredCount} z ${QUESTION_COUNT}`}
+          accessibilityLabel={`Odpowiedzi: ${answeredCount} z ${profile.questionCount}`}
         >
-          {answeredCount}/{QUESTION_COUNT}
+          {answeredCount}/{profile.questionCount}
         </Text>
 
-        {index === QUESTION_COUNT - 1 ? (
+        {index === profile.questionCount - 1 ? (
           <Pressable
             onPress={onSubmit}
             accessibilityRole="button"
@@ -336,9 +346,11 @@ export default function ExamAttemptScreen() {
 
 function ExamSummary({
   result,
+  profile,
   onClose,
 }: {
   result: ExamResult;
+  profile: ExamProfile;
   onClose: () => void;
 }) {
   const theme = useTheme();
@@ -350,10 +362,10 @@ function ExamSummary({
   // read it on its own — and the verdict is the one thing the exam is taken for.
   useEffect(() => {
     announce(
-      `Egzamin ${result.passed ? 'zdany' : 'niezdany'}: ${result.score} z ${QUESTION_COUNT}`
+      `Egzamin ${result.passed ? 'zdany' : 'niezdany'}: ${result.score} z ${profile.questionCount}`
         + (result.failedOnCritical ? '. Błąd padł w pytaniach krytycznych' : ''),
     );
-  }, [result]);
+  }, [result, profile]);
 
   return (
     <ScrollView contentContainerStyle={[styles.body, { paddingBottom }]}>
@@ -363,15 +375,15 @@ function ExamSummary({
 
       <Card>
         <Text style={[styles.score, { color: result.passed ? theme.good : theme.bad }]}>
-          {result.score}/{QUESTION_COUNT} — {result.passed ? 'zdane' : 'niezdane'}
+          {result.score}/{profile.questionCount} — {result.passed ? 'zdane' : 'niezdane'}
         </Text>
         {/* „Powyżej progu" (above the threshold) was false when the score equaled the
             threshold exactly, and that's the most common case: a mistake in the critical
             four gives exactly 9/10. */}
         {result.failedOnCritical ? (
           <Text style={{ color: theme.critical, fontSize: 14 }}>
-            Wynik wystarczał na zaliczenie (próg {PASS_THRESHOLD}/{QUESTION_COUNT}), ale błąd padł
-            w pierwszych {CRITICAL_COUNT} pytaniach — to oznacza niezdanie.
+            Wynik wystarczał na zaliczenie (próg {profile.passThreshold}/{profile.questionCount}),
+            ale błąd padł w pierwszych {profile.criticalCount} pytaniach — to oznacza niezdanie.
           </Text>
         ) : null}
         {result.passed ? <Muted>Taki wynik zalicza prawdziwy egzamin.</Muted> : null}

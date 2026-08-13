@@ -62,7 +62,10 @@ export default function LessonScreen() {
     };
   }, [slug]);
 
-  /** A link from the content — the shared path for both an in-page click and the navigation guard. */
+  /**
+   * A link from the content — the shared path for both an in-page click and the navigation
+   * guard.
+   */
   const openLink = useCallback(
     (href: string) => {
       const target = resolveLink(href, content.lessonSlugs);
@@ -274,7 +277,10 @@ export default function LessonScreen() {
           accessibilityState={{ checked: readState === 'read' }}
           style={({ pressed }) => [
             styles.readToggle,
-            { borderTopColor: theme.border, borderTopWidth: sets.length > 0 ? StyleSheet.hairlineWidth : 0 },
+            {
+              borderTopColor: theme.border,
+              borderTopWidth: sets.length > 0 ? StyleSheet.hairlineWidth : 0,
+            },
             pressed && styles.pressed,
           ]}
         >

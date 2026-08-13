@@ -140,6 +140,49 @@ export function SegmentedBar({ segments }: { segments: BarSegment[] }) {
   );
 }
 
+/**
+ * A switch between two or three views of the same screen — practice modes, exam profiles.
+ *
+ * The selection shows purely as a filled background, so `accessibilityState` isn't optional
+ * here: without it a screen reader announces identical options and there's no way to tell
+ * which list is on screen.
+ */
+export function ModeSwitch<Key extends string>({
+  options,
+  value,
+  onChange,
+}: {
+  options: readonly { key: Key; label: string }[];
+  value: Key;
+  onChange: (key: Key) => void;
+}) {
+  const theme = useTheme();
+
+  return (
+    <View style={[styles.switch, { backgroundColor: theme.surface, borderColor: theme.border }]}>
+      {options.map((option) => {
+        const active = option.key === value;
+        return (
+          <Pressable
+            key={option.key}
+            onPress={() => onChange(option.key)}
+            accessibilityRole="tab"
+            accessibilityState={{ selected: active }}
+            style={({ pressed }) => [
+              styles.switchOption,
+              active && { backgroundColor: theme.accent },
+              pressed && styles.pressed,
+            ]}
+          >
+            <Text style={[styles.switchLabel, { color: active ? theme.onFill : theme.text }]}>
+              {option.label}
+            </Text>
+          </Pressable>
+        );
+      })}
+    </View>
+  );
+}
 
 const styles = StyleSheet.create({
   card: {
@@ -161,4 +204,13 @@ const styles = StyleSheet.create({
   buttonLabel: { fontSize: 16, fontWeight: '600' },
   track: { height: 7, borderRadius: 4, overflow: 'hidden', flexDirection: 'row' },
   fill: { height: '100%', borderRadius: 3 },
+  switch: {
+    flexDirection: 'row',
+    borderRadius: 11,
+    borderWidth: StyleSheet.hairlineWidth,
+    padding: 3,
+    gap: 3,
+  },
+  switchOption: { flex: 1, borderRadius: 9, paddingVertical: 9, alignItems: 'center' },
+  switchLabel: { fontSize: 15, fontWeight: '600' },
 });

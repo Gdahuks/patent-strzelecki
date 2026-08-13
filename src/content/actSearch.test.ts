@@ -180,7 +180,10 @@ describe("provisions' wordings", () => {
 });
 
 describe('date on a hit in a provision not yet in force', () => {
-  /** An ordinary, currently-effective article — the filler before the new provision is made of these. */
+  /**
+   * An ordinary, currently-effective article — the filler before the new provision is made
+   * of these.
+   */
   function article(num: number, content: string): string {
     return (
       `<div class="unit unit_arti" data-id="arti_${num}"><h3>Art. ${num}.</h3>` +

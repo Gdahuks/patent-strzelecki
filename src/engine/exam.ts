@@ -1,25 +1,82 @@
 /**
- * Mock exam under PZSS rules, reproduced from the course's /patent-egzamin page:
+ * Mock exams, in two flavours — the app reproduces two real exams rather than offering a
+ * configurator like the course website does:
  *
- *   - 10 questions, 20 minutes,
- *   - a 9/10 pass mark,
- *   - the first 4 questions come from UoBiA and the safety rules and must all be
- *     correct: any mistake in that group of four fails the exam regardless of the
- *     rest of the score.
+ *   - the PZSS licence exam ("patent"), taken from the course's /patent-egzamin page:
+ *     10 questions, 20 minutes, a 9/10 pass mark, and the first 4 questions drawn from
+ *     UoBiA and the safety rules, all of which must be correct — any mistake in that group
+ *     of four fails the exam regardless of the rest of the score;
+ *   - the firearms-licence exam taken before a police committee ("WPA"), whose rules come
+ *     straight from § 4 of the exam regulation the app ships offline (Dz.U. 2023 poz. 1475):
+ *     20 questions, 30 minutes, a pass mark of 18. It has no critical group — that one is a
+ *     PZSS invention, not a statutory rule.
  *
- * The module is pure — no React Native, no database — so it can be tested without the app.
+ * Everything that differs between them lives in `ExamProfile`, so the screens carry no
+ * arithmetic of their own. The module is pure — no React Native, no database — so it can be
+ * tested without the app.
  */
 
 import type { Letter, Question } from '../content/types';
 import { shuffle } from './leitner';
 
-export const QUESTION_COUNT = 10;
-export const CRITICAL_COUNT = 4;
-export const PASS_THRESHOLD = 9;
-export const TIME_LIMIT_SECONDS = 20 * 60;
+export type ExamProfileId = 'patent' | 'wpa';
 
-/** Lessons that critical questions are drawn from. */
-export const CRITICAL_LESSONS = ['uobia', 'bezpieczenstwo'] as const;
+export interface ExamProfile {
+  id: ExamProfileId;
+  /** Label on the switch, and the name the exam is known by. */
+  title: string;
+  questionCount: number;
+  /** Questions at the front of the paper that must all be correct. Zero means no such group. */
+  criticalCount: number;
+  passThreshold: number;
+  timeLimitSeconds: number;
+  /** Lessons that critical questions are drawn from — empty when the profile has none. */
+  criticalLessons: readonly string[];
+  /**
+   * Content sets the pool is drawn from, or `null` for the whole question base.
+   *
+   * The WPA list is the course's own selection of 200 questions, shipped in the bundle —
+   * not a rule we derive from the regulation's subject-matter scope. Deriving it would put
+   * us in the position of deciding which questions the exam covers, and the course authors
+   * have already made that call.
+   */
+  setSlugs: readonly string[] | null;
+}
+
+export const PATENT_PROFILE: ExamProfile = {
+  id: 'patent',
+  title: 'Patent PZSS',
+  questionCount: 10,
+  criticalCount: 4,
+  passThreshold: 9,
+  timeLimitSeconds: 20 * 60,
+  criticalLessons: ['uobia', 'bezpieczenstwo'],
+  setSlugs: null,
+};
+
+export const WPA_PROFILE: ExamProfile = {
+  id: 'wpa',
+  title: 'WPA',
+  questionCount: 20,
+  criticalCount: 0,
+  passThreshold: 18,
+  timeLimitSeconds: 30 * 60,
+  criticalLessons: [],
+  setSlugs: ['wpa'],
+};
+
+export const EXAM_PROFILES: readonly ExamProfile[] = [PATENT_PROFILE, WPA_PROFILE];
+
+/**
+ * The profile for an id, falling back to the licence exam.
+ *
+ * Both callers hand over something they don't control: a route parameter and a column read
+ * back out of the database. An attempt saved by a future version under an id this build
+ * doesn't know must still open, so this never throws.
+ */
+export function examProfile(id: string | null | undefined): ExamProfile {
+  return EXAM_PROFILES.find((profile) => profile.id === id) ?? PATENT_PROFILE;
+}
 
 export interface ExamQuestion {
   question: Question;
@@ -38,13 +95,16 @@ export interface ExamAnswer {
 export interface ExamResult {
   score: number;
   passed: boolean;
-  /** Whether the failure comes from a mistake in the critical questions despite a score above the threshold. */
+  /**
+   * Whether the failure comes from a mistake in the critical questions despite a score above
+   * the threshold.
+   */
   failedOnCritical: boolean;
   answers: ExamAnswer[];
 }
 
-export function isCritical(question: Question): boolean {
-  return (CRITICAL_LESSONS as readonly string[]).includes(question.lesson);
+export function isCritical(question: Question, profile: ExamProfile): boolean {
+  return profile.criticalLessons.includes(question.lesson);
 }
 
 export class NotEnoughQuestionsError extends Error {}
@@ -100,20 +160,24 @@ export function latestMisses(
  * Builds the drawing pool from the preferred questions, topping it up from the fallback.
  *
  * An exam built from your own mistakes can't blow up just because there aren't enough of
- * them, or none happen to be critical — `drawExam` requires four critical questions and
- * ten in total. So we top the pool up to that minimum: critical questions first, then the
- * rest. The preferred questions stay in the pool in full, so the exam still focuses on
- * what you don't know.
+ * them, or none happen to be critical — `drawExam` requires a full paper, and the licence
+ * exam additionally requires four critical questions. So we top the pool up to that
+ * minimum: critical questions first, then the rest. The preferred questions stay in the
+ * pool in full, so the exam still focuses on what you don't know.
  */
-export function buildPool(preferred: Question[], fallback: Question[]): Question[] {
+export function buildPool(
+  preferred: Question[],
+  fallback: Question[],
+  profile: ExamProfile,
+): Question[] {
   const pool = [...preferred];
   const taken = new Set(pool.map((question) => question.id));
+  const criticalInPool = () => pool.filter((question) => isCritical(question, profile)).length;
 
-  const missingCritical = CRITICAL_COUNT - pool.filter(isCritical).length;
-  if (missingCritical > 0) {
+  if (criticalInPool() < profile.criticalCount) {
     for (const question of fallback) {
-      if (pool.filter(isCritical).length >= CRITICAL_COUNT) break;
-      if (isCritical(question) && !taken.has(question.id)) {
+      if (criticalInPool() >= profile.criticalCount) break;
+      if (isCritical(question, profile) && !taken.has(question.id)) {
         pool.push(question);
         taken.add(question.id);
       }
@@ -121,7 +185,7 @@ export function buildPool(preferred: Question[], fallback: Question[]): Question
   }
 
   for (const question of fallback) {
-    if (pool.length >= QUESTION_COUNT) break;
+    if (pool.length >= profile.questionCount) break;
     if (!taken.has(question.id)) {
       pool.push(question);
       taken.add(question.id);
@@ -132,42 +196,53 @@ export function buildPool(preferred: Question[], fallback: Question[]): Question
 }
 
 /**
- * Draws the exam set: the critical four first, then the rest.
+ * Draws the exam set: the critical questions first, then the rest.
+ *
+ * A profile with no critical group skips that split entirely rather than asking for zero
+ * critical questions — the whole pool is then one flat draw.
  */
-export function drawExam(pool: Question[], random: () => number = Math.random): ExamQuestion[] {
-  const critical = pool.filter(isCritical);
-  const rest = pool.filter((question) => !isCritical(question));
+export function drawExam(
+  pool: Question[],
+  profile: ExamProfile,
+  random: () => number = Math.random,
+): ExamQuestion[] {
+  const hasCritical = profile.criticalCount > 0;
+  const critical = hasCritical ? pool.filter((question) => isCritical(question, profile)) : [];
+  const rest = hasCritical
+    ? pool.filter((question) => !isCritical(question, profile))
+    : pool;
 
-  if (critical.length < CRITICAL_COUNT) {
+  if (critical.length < profile.criticalCount) {
     throw new NotEnoughQuestionsError(
-      `pula krytyczna ma ${critical.length} pytań, potrzeba ${CRITICAL_COUNT}`,
+      `pula krytyczna ma ${critical.length} pytań, potrzeba ${profile.criticalCount}`,
     );
   }
-  if (pool.length < QUESTION_COUNT) {
+  if (pool.length < profile.questionCount) {
     throw new NotEnoughQuestionsError(
-      `pula ma ${pool.length} pytań, potrzeba ${QUESTION_COUNT}`,
+      `pula ma ${pool.length} pytań, potrzeba ${profile.questionCount}`,
     );
   }
 
-  const drawnCritical = shuffle(critical, random).slice(0, CRITICAL_COUNT);
+  const drawnCritical = shuffle(critical, random).slice(0, profile.criticalCount);
   const chosen = new Set(drawnCritical.map((question) => question.id));
 
   // If there aren't enough non-critical questions, we draw extra ones from the critical
-  // pool — the set has to have the full ten questions.
+  // pool — the paper has to be complete.
   const fillers = shuffle([...rest, ...critical.filter((q) => !chosen.has(q.id))], random)
     .filter((question) => !chosen.has(question.id))
-    .slice(0, QUESTION_COUNT - CRITICAL_COUNT);
+    .slice(0, profile.questionCount - profile.criticalCount);
 
   return [...drawnCritical, ...fillers].map((question, index) => ({
     question,
     order: shuffle(Object.keys(question.answers) as Letter[], random),
-    critical: index < CRITICAL_COUNT,
+    critical: index < profile.criticalCount,
   }));
 }
 
 export function gradeExam(
   questions: ExamQuestion[],
   chosen: Map<string, Letter | null>,
+  profile: ExamProfile,
 ): ExamResult {
   const answers: ExamAnswer[] = questions.map((entry) => {
     const pick = chosen.get(entry.question.id) ?? null;
@@ -184,8 +259,8 @@ export function gradeExam(
 
   return {
     score,
-    passed: score >= PASS_THRESHOLD && !criticalMistake,
-    failedOnCritical: criticalMistake && score >= PASS_THRESHOLD,
+    passed: score >= profile.passThreshold && !criticalMistake,
+    failedOnCritical: criticalMistake && score >= profile.passThreshold,
     answers,
   };
 }

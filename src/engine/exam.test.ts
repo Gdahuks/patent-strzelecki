@@ -3,11 +3,11 @@ import { describe, it } from 'vitest';
 
 import type { Letter, Question } from '../content/types';
 import {
-  CRITICAL_COUNT,
   NotEnoughQuestionsError,
-  PASS_THRESHOLD,
-  QUESTION_COUNT,
+  PATENT_PROFILE,
+  WPA_PROFILE,
   buildPool,
+  examProfile,
   latestMisses,
   unansweredNumbers,
   drawExam,
@@ -15,6 +15,10 @@ import {
   gradeExam,
   isCritical,
 } from './exam';
+
+const QUESTION_COUNT = PATENT_PROFILE.questionCount;
+const CRITICAL_COUNT = PATENT_PROFILE.criticalCount;
+const PASS_THRESHOLD = PATENT_PROFILE.passThreshold;
 
 function question(id: string, lesson: string, correct: Letter = 'A'): Question {
   return {
@@ -45,17 +49,17 @@ function seeded(seed: number): () => number {
 
 describe('drawExam', () => {
   it('always draws a full set', () => {
-    const exam = drawExam(pool(50, 50), seeded(1));
+    const exam = drawExam(pool(50, 50), PATENT_PROFILE, seeded(1));
 
     assert.equal(exam.length, QUESTION_COUNT);
   });
 
   it('puts critical questions in the first four positions', () => {
-    const exam = drawExam(pool(50, 50), seeded(7));
+    const exam = drawExam(pool(50, 50), PATENT_PROFILE, seeded(7));
 
     for (let i = 0; i < CRITICAL_COUNT; i += 1) {
       assert.equal(exam[i].critical, true);
-      assert.equal(isCritical(exam[i].question), true);
+      assert.equal(isCritical(exam[i].question, PATENT_PROFILE), true);
     }
     for (let i = CRITICAL_COUNT; i < exam.length; i += 1) {
       assert.equal(exam[i].critical, false);
@@ -63,14 +67,14 @@ describe('drawExam', () => {
   });
 
   it('does not repeat a question within one set', () => {
-    const exam = drawExam(pool(50, 50), seeded(3));
+    const exam = drawExam(pool(50, 50), PATENT_PROFILE, seeded(3));
     const ids = exam.map((entry) => entry.question.id);
 
     assert.equal(new Set(ids).size, ids.length);
   });
 
   it('shuffles answer order', () => {
-    const exam = drawExam(pool(50, 50), seeded(5));
+    const exam = drawExam(pool(50, 50), PATENT_PROFILE, seeded(5));
 
     for (const entry of exam) {
       assert.deepEqual([...entry.order].sort(), ['A', 'B', 'C']);
@@ -81,25 +85,25 @@ describe('drawExam', () => {
   });
 
   it('gives different sets for different random seeds', () => {
-    const first = drawExam(pool(50, 50), seeded(1)).map((e) => e.question.id);
-    const second = drawExam(pool(50, 50), seeded(999)).map((e) => e.question.id);
+    const first = drawExam(pool(50, 50), PATENT_PROFILE, seeded(1)).map((e) => e.question.id);
+    const second = drawExam(pool(50, 50), PATENT_PROFILE, seeded(999)).map((e) => e.question.id);
 
     assert.notDeepEqual(first, second);
   });
 
   it('tops up the set from the critical pool when regular questions run short', () => {
-    const exam = drawExam(pool(30, 2), seeded(11));
+    const exam = drawExam(pool(30, 2), PATENT_PROFILE, seeded(11));
 
     assert.equal(exam.length, QUESTION_COUNT);
     assert.equal(new Set(exam.map((e) => e.question.id)).size, QUESTION_COUNT);
   });
 
   it('fails loudly when the critical pool is too small', () => {
-    assert.throws(() => drawExam(pool(2, 50), seeded(1)), NotEnoughQuestionsError);
+    assert.throws(() => drawExam(pool(2, 50), PATENT_PROFILE, seeded(1)), NotEnoughQuestionsError);
   });
 
   it('fails loudly when the whole pool is too small', () => {
-    assert.throws(() => drawExam(pool(4, 3), seeded(1)), NotEnoughQuestionsError);
+    assert.throws(() => drawExam(pool(4, 3), PATENT_PROFILE, seeded(1)), NotEnoughQuestionsError);
   });
 });
 
@@ -164,7 +168,7 @@ describe('lifecycle of the exam-from-mistakes pool', () => {
     // Without this, the screen would have to check itself whether there's anything to
     // draw from.
     const base = pool(CRITICAL_COUNT, QUESTION_COUNT);
-    const drawn = buildPool([], base);
+    const drawn = buildPool([], base, PATENT_PROFILE);
 
     assert.equal(drawn.length, QUESTION_COUNT);
     assert.ok(drawn.every((question) => base.some((entry) => entry.id === question.id)));
@@ -193,13 +197,14 @@ describe('lifecycle of the exam-from-mistakes pool', () => {
     const drawn = buildPool(
       missed.map((id) => base.find((question) => question.id === id)!),
       base,
+      PATENT_PROFILE,
     );
 
     // The three mistakes stay intact in full, the fallback fills in the rest — including
     // the missing critical ones.
     assert.equal(drawn.length, QUESTION_COUNT);
     assert.deepEqual(drawn.slice(0, 3).map((question) => question.id), ['k0', 'i2', 'i3']);
-    assert.ok(drawn.filter(isCritical).length >= CRITICAL_COUNT);
+    assert.ok(drawn.filter((q) => isCritical(q, PATENT_PROFILE)).length >= CRITICAL_COUNT);
   });
 });
 
@@ -236,7 +241,7 @@ describe('buildPool', () => {
   it('keeps every preferred question intact', () => {
     const weak = [question('w0', 'uobia'), question('w1', 'przepisy-karne')];
 
-    const result = buildPool(weak, base);
+    const result = buildPool(weak, base, PATENT_PROFILE);
 
     for (const q of weak) {
       assert.ok(result.some((entry) => entry.id === q.id));
@@ -244,7 +249,7 @@ describe('buildPool', () => {
   });
 
   it('tops up to a full set when there are too few mistakes', () => {
-    const result = buildPool([question('w0', 'przepisy-karne')], base);
+    const result = buildPool([question('w0', 'przepisy-karne')], base, PATENT_PROFILE);
 
     assert.ok(result.length >= QUESTION_COUNT);
   });
@@ -252,15 +257,15 @@ describe('buildPool', () => {
   it('tops up the critical pool when none of the mistakes was critical', () => {
     const weak = Array.from({ length: 12 }, (_, i) => question(`w${i}`, 'przepisy-karne'));
 
-    const result = buildPool(weak, base);
+    const result = buildPool(weak, base, PATENT_PROFILE);
 
-    assert.ok(result.filter(isCritical).length >= CRITICAL_COUNT);
+    assert.ok(result.filter((q) => isCritical(q, PATENT_PROFILE)).length >= CRITICAL_COUNT);
   });
 
   it('does not repeat questions', () => {
     const weak = [base[0], base[1], question('w0', 'uobia')];
 
-    const result = buildPool(weak, base);
+    const result = buildPool(weak, base, PATENT_PROFILE);
 
     assert.equal(new Set(result.map((q) => q.id)).size, result.length);
   });
@@ -268,30 +273,33 @@ describe('buildPool', () => {
   it('does not top up when the preferred ones are already enough', () => {
     const weak = pool(6, 8);
 
-    const result = buildPool(weak, base);
+    const result = buildPool(weak, base, PATENT_PROFILE);
 
     assert.equal(result.length, weak.length);
   });
 
   it('any composed pool can always be drawn from', () => {
     for (const weak of [[], [question('w0', 'przepisy-karne')], pool(1, 3), pool(0, 9)]) {
-      const result = buildPool(weak, base);
+      const result = buildPool(weak, base, PATENT_PROFILE);
 
-      assert.doesNotThrow(() => drawExam(result, seeded(13)));
+      assert.doesNotThrow(() => drawExam(result, PATENT_PROFILE, seeded(13)));
     }
   });
 
   it("an empty fallback database can't rescue a too-small pool — the exception still fires", () => {
-    const result = buildPool([question('w0', 'uobia')], []);
+    const result = buildPool([question('w0', 'uobia')], [], PATENT_PROFILE);
 
-    assert.throws(() => drawExam(result, seeded(1)), NotEnoughQuestionsError);
+    assert.throws(() => drawExam(result, PATENT_PROFILE, seeded(1)), NotEnoughQuestionsError);
   });
 });
 
 describe('gradeExam', () => {
-  const exam = drawExam(pool(50, 50), seeded(42));
+  const exam = drawExam(pool(50, 50), PATENT_PROFILE, seeded(42));
 
-  function answerAll(correctCount: number, wrongIndexes: number[] = []): Map<string, Letter | null> {
+  function answerAll(
+    correctCount: number,
+    wrongIndexes: number[] = [],
+  ): Map<string, Letter | null> {
     const chosen = new Map<string, Letter | null>();
     let given = 0;
     exam.forEach((entry, index) => {
@@ -303,7 +311,7 @@ describe('gradeExam', () => {
   }
 
   it('passes a full set of correct answers', () => {
-    const result = gradeExam(exam, answerAll(10));
+    const result = gradeExam(exam, answerAll(10), PATENT_PROFILE);
 
     assert.equal(result.score, 10);
     assert.equal(result.passed, true);
@@ -311,21 +319,21 @@ describe('gradeExam', () => {
   });
 
   it('passes a single mistake outside the critical pool', () => {
-    const result = gradeExam(exam, answerAll(10, [9]));
+    const result = gradeExam(exam, answerAll(10, [9]), PATENT_PROFILE);
 
     assert.equal(result.score, PASS_THRESHOLD);
     assert.equal(result.passed, true);
   });
 
   it('fails on two mistakes', () => {
-    const result = gradeExam(exam, answerAll(10, [8, 9]));
+    const result = gradeExam(exam, answerAll(10, [8, 9]), PATENT_PROFILE);
 
     assert.equal(result.score, 8);
     assert.equal(result.passed, false);
   });
 
   it('fails on a critical mistake despite a score above the threshold', () => {
-    const result = gradeExam(exam, answerAll(10, [0]));
+    const result = gradeExam(exam, answerAll(10, [0]), PATENT_PROFILE);
 
     assert.equal(result.score, PASS_THRESHOLD);
     assert.equal(result.passed, false);
@@ -338,18 +346,119 @@ describe('gradeExam', () => {
       chosen.set(entry.question.id, index === 5 ? null : entry.question.correct);
     });
 
-    const result = gradeExam(exam, chosen);
+    const result = gradeExam(exam, chosen, PATENT_PROFILE);
 
     assert.equal(result.score, 9);
     assert.equal(result.answers[5].wasCorrect, false);
   });
 
   it('fails an empty paper', () => {
-    const result = gradeExam(exam, new Map());
+    const result = gradeExam(exam, new Map(), PATENT_PROFILE);
 
     assert.equal(result.score, 0);
     assert.equal(result.passed, false);
     assert.equal(result.failedOnCritical, false);
+  });
+});
+
+/**
+ * The WPA paper, whose rules come from § 4 of the exam regulation (Dz.U. 2023 poz. 1475):
+ * twenty questions, thirty minutes, a pass mark of eighteen and no critical group.
+ *
+ * The critical group is the part that can break quietly. Everything about the draw used to
+ * assume there is one, and asking for zero of them is a different thing from having none:
+ * the first would still fail the "is the critical pool big enough" check.
+ */
+describe('the WPA profile', () => {
+  it('carries the numbers from the regulation', () => {
+    assert.equal(WPA_PROFILE.questionCount, 20);
+    assert.equal(WPA_PROFILE.timeLimitSeconds, 30 * 60);
+    assert.equal(WPA_PROFILE.passThreshold, 18);
+    assert.equal(WPA_PROFILE.criticalCount, 0);
+  });
+
+  it('draws a full paper with nothing marked critical', () => {
+    // The pool is full of questions the licence exam would treat as critical — under this
+    // profile that classification simply doesn't exist.
+    const exam = drawExam(pool(50, 50), WPA_PROFILE, seeded(2));
+
+    assert.equal(exam.length, 20);
+    assert.ok(exam.every((entry) => !entry.critical));
+  });
+
+  it('draws from a pool with no critical questions at all', () => {
+    // The licence exam would throw here, and that's the trap: a profile without a critical
+    // group must not inherit its requirement.
+    assert.doesNotThrow(() => drawExam(pool(0, 25), WPA_PROFILE, seeded(4)));
+  });
+
+  it('still refuses a pool too small for the paper', () => {
+    assert.throws(() => drawExam(pool(0, 19), WPA_PROFILE, seeded(1)), NotEnoughQuestionsError);
+  });
+
+  it('does not repeat a question within one paper', () => {
+    const ids = drawExam(pool(50, 50), WPA_PROFILE, seeded(8)).map((e) => e.question.id);
+
+    assert.equal(new Set(ids).size, 20);
+  });
+
+  it('passes at the threshold and fails one below it', () => {
+    const exam = drawExam(pool(0, 40), WPA_PROFILE, seeded(6));
+    const answers = (correct: number) =>
+      new Map<string, Letter | null>(
+        exam.map((entry, index) => [
+          entry.question.id,
+          index < correct ? entry.question.correct : 'B',
+        ]),
+      );
+
+    const atThreshold = gradeExam(exam, answers(18), WPA_PROFILE);
+    assert.equal(atThreshold.score, 18);
+    assert.equal(atThreshold.passed, true);
+
+    const below = gradeExam(exam, answers(17), WPA_PROFILE);
+    assert.equal(below.score, 17);
+    assert.equal(below.passed, false);
+    // There is no critical group, so a failure can never be blamed on one.
+    assert.equal(below.failedOnCritical, false);
+  });
+
+  it('a mistake on the first question is an ordinary mistake', () => {
+    const exam = drawExam(pool(50, 50), WPA_PROFILE, seeded(9));
+    const chosen = new Map<string, Letter | null>(
+      exam.map((entry, index) => [entry.question.id, index === 0 ? 'B' : entry.question.correct]),
+    );
+
+    const result = gradeExam(exam, chosen, WPA_PROFILE);
+
+    assert.equal(result.score, 19);
+    assert.equal(result.passed, true);
+    assert.equal(result.failedOnCritical, false);
+  });
+
+  it('tops a mistakes pool up to a full paper without demanding critical questions', () => {
+    const base = pool(0, 40);
+    const result = buildPool([base[0], base[1]], base, WPA_PROFILE);
+
+    assert.equal(result.length, 20);
+    assert.deepEqual(result.slice(0, 2).map((q) => q.id), [base[0].id, base[1].id]);
+    assert.doesNotThrow(() => drawExam(result, WPA_PROFILE, seeded(12)));
+  });
+});
+
+describe('examProfile', () => {
+  it('finds a profile by id', () => {
+    assert.equal(examProfile('wpa'), WPA_PROFILE);
+    assert.equal(examProfile('patent'), PATENT_PROFILE);
+  });
+
+  it('falls back to the licence exam for anything unknown', () => {
+    // Both callers hand over something they don't control — a route parameter and a column
+    // read out of the database — and an attempt saved by a newer version has to stay
+    // readable rather than crash the screen that opens it.
+    assert.equal(examProfile(undefined), PATENT_PROFILE);
+    assert.equal(examProfile(null), PATENT_PROFILE);
+    assert.equal(examProfile('cokolwiek'), PATENT_PROFILE);
   });
 });
 

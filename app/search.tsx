@@ -124,7 +124,12 @@ export default function SearchScreen() {
     <View style={[styles.screen, { backgroundColor: theme.bg }]}>
       <Stack.Screen options={{ title: 'Szukaj' }} />
 
-      <View style={[styles.searchBar, { backgroundColor: theme.surface, borderBottomColor: theme.border }]}>
+      <View
+        style={[
+          styles.searchBar,
+          { backgroundColor: theme.surface, borderBottomColor: theme.border },
+        ]}
+      >
         <TextInput
           value={query}
           onChangeText={setQuery}
@@ -134,7 +139,10 @@ export default function SearchScreen() {
           autoCorrect={false}
           clearButtonMode="while-editing"
           returnKeyType="search"
-          style={[styles.input, { color: theme.text, backgroundColor: theme.bg, borderColor: theme.border }]}
+          style={[
+            styles.input,
+            { color: theme.text, backgroundColor: theme.bg, borderColor: theme.border },
+          ]}
         />
         {summary ? (
           <Text style={[styles.summary, { color: theme.muted }]}>{summary}</Text>
