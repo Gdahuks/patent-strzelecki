@@ -62,8 +62,9 @@ export default function EgzaminScreen() {
    * quiz never saw the button, despite having actual mistakes of their own. The exam is a
    * separate progress track and doesn't connect to practice mode in either direction.
    *
-   * Narrowed to this profile's pool by the same call the attempt makes, so the number can't
-   * promise questions the draw would then refuse to use.
+   * Counted from this profile's own attempts, through the same two calls the attempt makes,
+   * so the number can't promise questions the draw would then refuse to use — and can't
+   * count mistakes made in the other exam, which is what it did when the two shared a pool.
    */
   const [missedCount, setMissedCount] = useState(0);
 
@@ -71,7 +72,9 @@ export default function EgzaminScreen() {
 
   const refresh = useCallback(() => {
     void recentAttempts(profile.id).then(setAttempts);
-    void missedQuestionIds().then((ids) => setMissedCount(profileMisses(ids, pool).length));
+    void missedQuestionIds(profile.id).then((ids) =>
+      setMissedCount(profileMisses(ids, pool).length),
+    );
   }, [profile, pool]);
 
   useFocusEffect(refresh);
@@ -186,8 +189,10 @@ export default function EgzaminScreen() {
             onPress={() => router.push(`/exam/attempt?profile=${profile.id}&pool=weak`)}
           />
           <Muted>
+            {/* „w egzaminach" (in exams) was true when the pool spanned both profiles, and
+                stayed on screen as a promise the draw no longer keeps. */}
             Losowany z {missedCount} {plural(missedCount, 'pytania', 'pytań', 'pytań')}, na których
-            pomyliłeś się w egzaminach. Zasady te same; gdy błędów nie starcza na pełny zestaw
+            pomyliłeś się w tym egzaminie. Zasady te same; gdy błędów nie starcza na pełny zestaw
             {profile.criticalCount > 0 ? ' albo na czwórkę krytyczną' : ''}, pula dopełniana jest
             z całej puli tego egzaminu.
           </Muted>

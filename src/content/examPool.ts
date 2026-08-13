@@ -30,9 +30,13 @@ export function profileAvailable(profile: ExamProfile): boolean {
 /**
  * Past exam mistakes that this profile can actually ask about again.
  *
- * Attempt history is one table for both exams, so the narrowing happens here instead of in
- * the database. It has to be the same call on the exam screen and inside the attempt, or the
- * count next to the button would promise questions the draw can't use.
+ * The mistakes already come from this profile's own attempts — `missedQuestionIds` filters by
+ * profile. This is the second, narrower guard: a profile's pool comes from the content bundle,
+ * and the bundle can change under a database that outlives it. A question dropped from the
+ * course's WPA list would otherwise come back on a WPA paper through an old attempt.
+ *
+ * It has to be the same call on the exam screen and inside the attempt, or the count next to
+ * the button would promise questions the draw can't use.
  */
 export function profileMisses(missedIds: string[], pool: Question[]): Question[] {
   const inPool = new Map(pool.map((question) => [question.id, question]));

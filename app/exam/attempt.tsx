@@ -74,12 +74,12 @@ export default function ExamAttemptScreen() {
       // in the mix because there can be fewer mistakes than the paper has questions, and none
       // of them has to be critical.
       //
-      // The mistakes are narrowed to this profile's own pool, which is what keeps the two
-      // exams apart without a second table: a question missed on the licence exam but absent
-      // from the WPA list can't come back on a WPA paper, while one missed on a WPA paper
-      // feeds the licence exam normally, because there it belongs to the scope.
+      // The mistakes come from this profile's own attempts and are then narrowed to its pool.
+      // Sharing them across profiles was tried and reported as a bug: a question missed on the
+      // licence exam surfaced under WPA whenever it sat on the course's WPA list, so a profile
+      // with no attempts at all still offered an exam built from mistakes in it.
       const questions = fromWeak
-        ? buildPool(profileMisses(await missedQuestionIds(), base), base, profile)
+        ? buildPool(profileMisses(await missedQuestionIds(profile.id), base), base, profile)
         : base;
       if (cancelled) return;
 

@@ -285,6 +285,16 @@ along with that mixing. The counter next to the button has to be sourced from th
 place as the question pool, or the button disappears for someone who has exam mistakes but
 doesn't practise with the ABC quiz.
 
+**The two exam profiles keep separate mistake pools, the same way they keep separate
+histories.** `missedQuestionIds` takes a profile and reads only that profile's attempts; the
+narrowing to the profile's question pool in `profileMisses` is a second guard, for a bundle
+that changes under a database outliving it. Sharing the pool across profiles was shipped once
+and reported by a tester: a question missed on the licence exam surfaced under WPA whenever it
+happened to sit on the course's 200-question WPA list, so a profile with no attempts at all
+announced „Jeszcze nie podchodziłeś do tego egzaminu" and offered an exam from mistakes in it,
+on the same screen. The price — the same question may need fixing separately in each exam — is
+the price flashcards and the quiz already pay for being separate tracks.
+
 **The exam mistake pool only cares about the latest verdict, not the mere fact of a mistake**
 (`latestMisses`). An earlier version collected mistakes across the last ten attempts, and the
 pool never healed: a question answered correctly afterwards stayed in the pool until enough
