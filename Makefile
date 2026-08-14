@@ -182,8 +182,19 @@ aab-content: ## What content the built AAB carries (also runs at the end of andr
 	@test -f '$(CONTENT_MANIFEST)' || { \
 	  printf 'No content bundle: %s\nSee "Skąd się bierze treść" in README.md\n' '$(CONTENT_MANIFEST)'; \
 	  exit 1; }
-	@set -- $$(node -pe "const m = JSON.parse(require('fs').readFileSync('$(CONTENT_MANIFEST)', 'utf8')); \
-	     m.version + ' ' + m.scrapedAt"); \
+	@# Both values have to be non-empty before they reach grep, and the manifest is read by a
+	@# node that throws rather than printing `undefined`. Without this the check reports success
+	@# on a manifest missing a field: `grep -F ''` matches any file at all, and the string
+	@# "undefined" is present in every JS bundle — so it would announce OK having compared
+	@# nothing. A check that can only pass is worse than no check, and it fails exactly the way
+	@# the build it guards used to.
+	@META=$$(node -pe "const m = JSON.parse(require('fs').readFileSync('$(CONTENT_MANIFEST)', 'utf8')); \
+	     if (!m.version || !m.scrapedAt) throw new Error('incomplete manifest'); \
+	     m.version + ' ' + m.scrapedAt" 2>/dev/null); \
+	 set -- $$META; \
+	 test $$# -eq 2 || { \
+	   printf 'No content version in %s — the file is damaged or incomplete.\n' '$(CONTENT_MANIFEST)'; \
+	   printf 'Rebuild the content bundle; see "Skąd się bierze treść" in README.md\n'; exit 1; }; \
 	 JS=$$(mktemp); \
 	 unzip -p '$(AAB)' base/assets/index.android.bundle > "$$JS" 2>/dev/null || { \
 	   printf 'No JS bundle inside the package (base/assets/index.android.bundle).\n'; \
