@@ -30,10 +30,16 @@ UPLOAD_KEYCHAIN_ITEM ?= $(PATENT_UPLOAD_KEYCHAIN_ITEM)
 # that target ends up owning the keystore, not the original author.
 KEY_DNAME ?= CN=$(USER), OU=patent-strzelecki, O=patent-strzelecki, C=PL
 
+# The package that goes to Google Play, and the file describing the content bundle that's
+# currently in the working tree. `aab-content` compares the two.
+AAB              := android/app/build/outputs/bundle/release/app-release.aab
+CONTENT_MANIFEST := assets/content/manifest.json
+
 .DEFAULT_GOAL := help
 .PHONY: help setup \
         typecheck lint check start start-clean bundle ios ios-sim prebuild \
-        android android-aab android-key android-avd android-emu prebuild-android version \
+        android android-aab aab-content drop-stale-bundle \
+        android-key android-avd android-emu prebuild-android version \
         icons icons-write doctor clean clean-native
 
 help: ## This list
@@ -114,8 +120,23 @@ prebuild: ## Copy config and icons into the native ios/ project
 # The emulator has to already be running — start it with make android-emu or from the
 # Device Manager in Android Studio. `expo run:android` picks whichever device is connected
 # on its own, so this one target installs onto both an emulator and a physical phone.
-android: prebuild-android ## Release build onto the emulator or a connected Android phone
+android: prebuild-android drop-stale-bundle ## Release build onto the emulator or a connected Android phone
 	npx expo run:android --variant release
+
+# Gradle keeps the JS bundle it compiled last time under android/app/build, and decides
+# whether that task is up to date from its own inputs — not from assets/content/content.json.
+# A refreshed content bundle therefore doesn't invalidate anything, and the build reuses the
+# JS from the previous run: 0.2.0 shipped content three days older than the one on disk, an
+# hour after a successful refresh.
+#
+# That failure has no symptom to notice. `make check` passes, Gradle reports success, the
+# signature is right, and the divergence exists only between the working tree and the
+# artefact — so nothing along the way can see it. Hence the deletion here rather than a
+# reminder somewhere: the cost is one JS bundle recompiled from scratch, and the alternative
+# is a store release with stale course content.
+drop-stale-bundle:
+	@rm -rf android/app/build/generated/assets/createBundleReleaseJsAndAssets \
+	        android/app/build/intermediates/assets/release
 
 # Google Play doesn't accept an APK from a new app — only an Android App Bundle. As a bonus,
 # AAB splits the package into per-device variants, so a phone downloads one architecture
@@ -125,7 +146,7 @@ android: prebuild-android ## Release build onto the emulator or a connected Andr
 # falls back to the debug signature (see the plugin in app.config.js) and you'd end up with
 # a file Play won't accept, finding out only from Play itself. Better to stop right here and
 # say what's missing.
-android-aab: prebuild-android ## AAB package for Google Play (signed with the upload key)
+android-aab: prebuild-android drop-stale-bundle ## AAB package for Google Play (signed with the upload key)
 	@test -n '$(UPLOAD_KEYSTORE)' -a -n '$(UPLOAD_KEYCHAIN_ITEM)' || { \
 	  printf 'Not sure where the upload key lives.\n'; \
 	  printf 'Set in your shell profile: PATENT_UPLOAD_KEYSTORE and PATENT_UPLOAD_KEYCHAIN_ITEM\n'; \
@@ -140,11 +161,43 @@ android-aab: prebuild-android ## AAB package for Google Play (signed with the up
 	  PATENT_UPLOAD_STORE_FILE='$(UPLOAD_KEYSTORE)' \
 	  PATENT_UPLOAD_PASSWORD="$$(security find-generic-password -s '$(UPLOAD_KEYCHAIN_ITEM)' -w)" \
 	  ./gradlew bundleRelease
-	@printf '\nAAB: %s\n' 'android/app/build/outputs/bundle/release/app-release.aab'
+	@printf '\nAAB: %s\n' '$(AAB)'
 	@printf 'Signed by:\n'
-	@keytool -printcert -jarfile \
-	  'android/app/build/outputs/bundle/release/app-release.aab' \
-	  | grep -m1 'Owner:' || true
+	@keytool -printcert -jarfile '$(AAB)' | grep -m1 'Owner:' || true
+	@$(MAKE) --no-print-directory aab-content
+
+# Reads the content version out of the **package**, not out of the working tree. Those are
+# two different questions, and the whole point of this target is the case where they disagree
+# (see the comment on drop-stale-bundle). Worth running on its own before every upload to
+# Play: it costs a second and answers "what is actually in the file I'm sending".
+#
+# Two traps live in the grep. The Hermes bytecode is a binary file, so without `-a` BSD grep
+# reports no match even for a string that's there — a false alarm indistinguishable from the
+# problem this looks for. And it works at all only because a version hash and a timestamp are
+# ASCII: Polish strings sit in that bundle as UTF-16, so searching for them as UTF-8 finds
+# nothing and looks like a missing feature.
+aab-content: ## What content the built AAB carries (also runs at the end of android-aab)
+	@test -f '$(AAB)' || { \
+	  printf 'No package: %s\nBuild it first: make android-aab\n' '$(AAB)'; exit 1; }
+	@test -f '$(CONTENT_MANIFEST)' || { \
+	  printf 'No content bundle: %s\nSee "Skąd się bierze treść" in README.md\n' '$(CONTENT_MANIFEST)'; \
+	  exit 1; }
+	@set -- $$(node -pe "const m = JSON.parse(require('fs').readFileSync('$(CONTENT_MANIFEST)', 'utf8')); \
+	     m.version + ' ' + m.scrapedAt"); \
+	 JS=$$(mktemp); \
+	 unzip -p '$(AAB)' base/assets/index.android.bundle > "$$JS" 2>/dev/null || { \
+	   printf 'No JS bundle inside the package (base/assets/index.android.bundle).\n'; \
+	   rm -f "$$JS"; exit 1; }; \
+	 printf 'Content on disk: %s  (scraped %s)\n' "$$1" "$$2"; \
+	 if grep -aqF "$$1" "$$JS" && grep -aqF "$$2" "$$JS"; then \
+	   rm -f "$$JS"; printf 'Content in AAB:  the same — OK\n'; \
+	 else \
+	   rm -f "$$JS"; \
+	   printf 'Content in AAB:  SOMETHING ELSE\n\n'; \
+	   printf 'The package carries a different content bundle than assets/content.\n'; \
+	   printf 'Build it again — make android-aab drops the stale JS bundle first.\n'; \
+	   exit 1; \
+	 fi
 
 # Once in the app's lifetime. This is the **upload** key, not the signing key: with Play App
 # Signing, the real signing key is held by Google, and this one only confirms that it's you
