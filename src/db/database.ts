@@ -117,6 +117,38 @@ async function migrateAttemptsToProfiles(database: SQLite.SQLiteDatabase): Promi
   `);
 }
 
+/**
+ * Splits the reading position into "where I stopped" and "how far I got".
+ *
+ * The peak is seeded from the position already saved: for a lesson in progress that is the
+ * furthest place its reader has been, so nobody's percentage drops after the update. It is a
+ * statement about old rows, which is why it appears in the `INSERT ... SELECT` rather than as
+ * a column default — a later insert that forgets the peak should fail, not quietly claim the
+ * reader had been there.
+ */
+async function migrateReadingToConfirmedPeak(database: SQLite.SQLiteDatabase): Promise<void> {
+  const columns = await database.getAllAsync<{ name: string }>(
+    "SELECT name FROM pragma_table_info('reading')",
+  );
+  if (columns.length === 0 || columns.some((column) => column.name === 'max_position')) return;
+
+  await database.execAsync(`
+    BEGIN;
+    ALTER TABLE reading RENAME TO reading_bez_szczytu;
+    CREATE TABLE reading (
+      lesson_slug  TEXT PRIMARY KEY NOT NULL,
+      position     REAL NOT NULL DEFAULT 0,
+      max_position REAL NOT NULL DEFAULT 0,
+      state        TEXT NOT NULL DEFAULT 'started',
+      updated_at   INTEGER NOT NULL DEFAULT 0
+    );
+    INSERT INTO reading (lesson_slug, position, max_position, state, updated_at)
+      SELECT lesson_slug, position, position, state, updated_at FROM reading_bez_szczytu;
+    DROP TABLE reading_bez_szczytu;
+    COMMIT;
+  `);
+}
+
 export function db(): Promise<SQLite.SQLiteDatabase> {
   // A failed open must not be memoized forever — otherwise one startup error would
   // cripple the app until the next restart. On rejection we clear the memoized promise,
@@ -142,10 +174,11 @@ async function openDatabase(): Promise<SQLite.SQLiteDatabase> {
       PRIMARY KEY (question_id, mode)
     );
     CREATE TABLE IF NOT EXISTS reading (
-      lesson_slug TEXT PRIMARY KEY NOT NULL,
-      position    REAL NOT NULL DEFAULT 0,
-      state       TEXT NOT NULL DEFAULT 'started',
-      updated_at  INTEGER NOT NULL DEFAULT 0
+      lesson_slug  TEXT PRIMARY KEY NOT NULL,
+      position     REAL NOT NULL DEFAULT 0,
+      max_position REAL NOT NULL DEFAULT 0,
+      state        TEXT NOT NULL DEFAULT 'started',
+      updated_at   INTEGER NOT NULL DEFAULT 0
     );
     CREATE TABLE IF NOT EXISTS settings (
       key   TEXT PRIMARY KEY NOT NULL,
@@ -165,6 +198,7 @@ async function openDatabase(): Promise<SQLite.SQLiteDatabase> {
 
   await migrateProgressToModes(handle);
   await migrateAttemptsToProfiles(handle);
+  await migrateReadingToConfirmedPeak(handle);
   return handle;
 }
 
