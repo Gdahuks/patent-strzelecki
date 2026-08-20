@@ -42,13 +42,22 @@ export function isLessonKey(key: string): boolean {
 
 export type ReadingState = 'started' | 'read';
 
+/**
+ * Two numbers, because there are two questions.
+ *
+ * `position` is the last place the reader was, and answers "where do I open this lesson".
+ * `maxPosition` is the furthest **confirmed** place — see `readingDwell` for what confirms
+ * one — and answers "how far through is this lesson". Keeping a single value for both is
+ * what made scrolling back up lower the reported progress.
+ */
 export interface Reading {
   position: number;
+  maxPosition: number;
   state: ReadingState;
 }
 
 /**
- * Where to open a lesson.
+ * Where to open a lesson — the last place, never the peak.
  *
  * A lesson marked as read opens from the start — a re-read starts over, and returning to
  * the last paragraph gains nothing. Checking position alongside state isn't redundant:
@@ -64,6 +73,6 @@ export function resumePosition(reading: Reading | null | undefined): number {
 export function readingLabel(reading: Reading | undefined): string | null {
   if (!reading) return null;
   if (reading.state === 'read') return 'przeczytane';
-  const percent = Math.round(reading.position * 100);
+  const percent = Math.round(reading.maxPosition * 100);
   return percent < 3 ? 'zaczęte' : `w trakcie · ${percent}%`;
 }
