@@ -218,6 +218,28 @@ course site, and the app has its own quizzing anyway.
 **Reading position is stored as a fraction, not a pixel offset.** Content height changes with
 font scale, so a pixel offset would point at a different place after a settings change.
 
+**Reading progress and the reading position are two different numbers.** `position` is the last
+place the reader was and answers only "where do I open this lesson"; `max_position` is the
+furthest **confirmed** place and is what the percentage and the read state are made of. One
+value used to answer both questions, and then scrolling back up lowered the reported progress.
+
+A place counts as confirmed once it has been **on screen for two seconds in total**
+(`src/engine/readingDwell.ts`), so a fling through a lesson confirms nothing while reading at
+any pace confirms everything it passes. Two simpler rules were tried and dropped: "the furthest
+position reached" credits a fling nobody read, and "the position held still for two seconds" has
+a speed limit, so a reader dragging the text at their own pace silently earns nothing. What the
+rule deliberately allows: scrolling to the bottom and resting there for two seconds marks the
+whole lesson read. The per-place counters live in the screen's memory for one visit only — the
+database holds nothing but the peak — and they reset when the page is reflowed (a rotation, or a
+change of system font size), because a counter gathered against the old layout no longer
+describes the text it was counted for.
+
+The screen ticks twice a second while the lesson is in front of the reader, since at the bottom
+of a lesson no scroll event ever arrives again and a lesson shorter than the screen fires none at
+all. It stops ticking when the screen loses focus or the app leaves the foreground, and no single
+gap between samples may confirm a place on its own — a lesson left open in a pocket must not earn
+progress.
+
 **External links go through `expo-web-browser`, not `Linking.openURL`** — the latter crashed on
 iOS with "Unable to open URL". The one exception is the `mailto:` link on the "Aplikacja" card:
 a browser has no way to open an address that isn't a web page, so that one still uses `Linking`.

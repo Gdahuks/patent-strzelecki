@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'vitest';
 
-import { parseScrollMessage, readingScript } from './readingScript';
+import { parseReadingSample, readingScript } from './readingScript';
 
 describe('readingScript', () => {
   it('embeds the starting position', () => {
@@ -28,34 +28,90 @@ describe('readingScript', () => {
   });
 });
 
-describe('parseScrollMessage', () => {
-  it('reads a well-formed message', () => {
-    assert.equal(parseScrollMessage('{"type":"scroll","position":0.33}'), 0.33);
+describe('readingScript reports where scrolling stopped', () => {
+  it('resets an idle timer on every scroll event', () => {
+    // Without this the last sample is whatever the rate limit caught mid-fling — and at the
+    // bottom of a lesson no further scroll event ever arrives.
+    const script = readingScript(0);
+
+    assert.match(script, /clearTimeout\(idle\)/);
+    assert.match(script, /idle = setTimeout\(report, \d+\)/);
   });
 
-  it('clamps the position to range', () => {
-    assert.equal(parseScrollMessage('{"type":"scroll","position":1.4}'), 1);
-    assert.equal(parseScrollMessage('{"type":"scroll","position":-0.2}'), 0);
+  it('reports the viewport height and the page height alongside the position', () => {
+    const script = readingScript(0);
+
+    assert.match(script, /view: /);
+    assert.match(script, /height: height/);
   });
 
-  it('rejects a message of an unrelated type', () => {
-    assert.equal(parseScrollMessage('{"type":"cokolwiek","position":0.5}'), null);
+  it('marks the samples it sends on load as unasked-for', () => {
+    // The screen takes the window from them but leaves the position alone, so opening a lesson
+    // and closing it straight away leaves no trace.
+    const script = readingScript(0);
+
+    assert.match(script, /report\(true\)/);
+    assert.match(script, /initial: initial === true/);
   });
 
-  it('rejects a missing or non-numeric position', () => {
-    assert.equal(parseScrollMessage('{"type":"scroll"}'), null);
-    assert.equal(parseScrollMessage('{"type":"scroll","position":"0.5"}'), null);
-    assert.equal(parseScrollMessage('{"type":"scroll","position":null}'), null);
+  it('reports once at the start, whatever the page height', () => {
+    // The tracker needs a window to measure against before the first scroll, and a lesson
+    // shorter than the screen never fires a scroll event at all.
+    const script = readingScript(0);
+
+    assert.doesNotMatch(script, /scrollHeight <= window\.innerHeight/);
+  });
+});
+
+describe('parseReadingSample', () => {
+  it('reads a well-formed sample', () => {
+    assert.deepEqual(
+      parseReadingSample('{"type":"scroll","position":0.33,"view":0.2,"height":8000}'),
+      { initial: false, position: 0.33, view: 0.2, height: 8000 },
+    );
   });
 
-  it('rejects NaN', () => {
-    assert.equal(parseScrollMessage('{"type":"scroll","position":1e999}'), null);
+  it('clamps the fractions to range', () => {
+    assert.deepEqual(parseReadingSample('{"type":"scroll","position":1.4,"view":3}'), {
+      initial: false,
+      position: 1,
+      view: 1,
+      height: 0,
+    });
+    assert.deepEqual(parseReadingSample('{"type":"scroll","position":-0.2,"view":-1}'), {
+      initial: false,
+      position: 0,
+      view: 0,
+      height: 0,
+    });
   });
 
-  it('doesn’t crash on garbage input', () => {
-    assert.equal(parseScrollMessage('to nie jest json'), null);
-    assert.equal(parseScrollMessage(''), null);
-    assert.equal(parseScrollMessage('null'), null);
-    assert.equal(parseScrollMessage('[1,2,3]'), null);
+  it('treats a missing viewport height as unknown, not as the whole page', () => {
+    assert.deepEqual(parseReadingSample('{"type":"scroll","position":0.5}'), {
+      initial: false,
+      position: 0.5,
+      view: 0,
+      height: 0,
+    });
+  });
+
+  it('treats a missing page height as unknown, so nothing looks like a reflow', () => {
+    assert.equal(parseReadingSample('{"type":"scroll","position":0.5,"view":0.1}')?.height, 0);
+  });
+
+  it('carries the unasked-for marker through', () => {
+    assert.equal(
+      parseReadingSample('{"type":"scroll","position":0,"view":0.3,"initial":true}')?.initial,
+      true,
+    );
+  });
+
+  it('ignores a message of another kind', () => {
+    assert.equal(parseReadingSample('{"type":"link","href":"x"}'), null);
+  });
+
+  it('ignores anything that is not a message', () => {
+    assert.equal(parseReadingSample('nonsense'), null);
+    assert.equal(parseReadingSample('{"type":"scroll"}'), null);
   });
 });

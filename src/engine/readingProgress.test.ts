@@ -10,8 +10,12 @@ import {
   resumePosition,
 } from './readingProgress';
 
-function reading(position: number, state: Reading['state'] = 'started'): Reading {
-  return { position, state };
+function reading(
+  position: number,
+  maxPosition = position,
+  state: Reading['state'] = 'started',
+): Reading {
+  return { position, maxPosition, state };
 }
 
 describe('resumePosition', () => {
@@ -26,8 +30,8 @@ describe('resumePosition', () => {
 
   it('a lesson marked read opens from the beginning', () => {
     // A re-read starts over; returning to the last paragraph gains nothing.
-    assert.equal(resumePosition(reading(1, 'read')), 0);
-    assert.equal(resumePosition(reading(0.98, 'read')), 0);
+    assert.equal(resumePosition(reading(1, 1, 'read')), 0);
+    assert.equal(resumePosition(reading(0.98, 0.98, 'read')), 0);
   });
 
   it('manually unmarking read does not return to the end', () => {
@@ -69,7 +73,7 @@ describe('readingLabel', () => {
   });
 
   it('names the read state', () => {
-    assert.equal(readingLabel(reading(1, 'read')), 'przeczytane');
+    assert.equal(readingLabel(reading(1, 1, 'read')), 'przeczytane');
   });
 
   it('shows progress as a percentage', () => {
@@ -78,5 +82,36 @@ describe('readingLabel', () => {
 
   it('names a barely-started lesson as started, without showing zero percent', () => {
     assert.equal(readingLabel(reading(0.01)), 'zaczęte');
+  });
+});
+
+describe('the label reads the confirmed peak, not the last place', () => {
+  it('scrolling back up does not lower the percentage', () => {
+    // The bug behind #18: one value answered both questions at once.
+    assert.equal(readingLabel(reading(0.2, 0.8)), 'w trakcie · 80%');
+  });
+
+  it('a last position ahead of the peak does not raise the percentage', () => {
+    // Flinging to the end moves the last position but confirms nothing, so the label has to
+    // report the peak alone. Reading the two together once gave a flung lesson 100%.
+    assert.equal(readingLabel(reading(1, 0.2)), 'w trakcie · 20%');
+  });
+
+  it('a peak below three percent is only "started"', () => {
+    assert.equal(readingLabel(reading(0, 0.02)), 'zaczęte');
+  });
+
+  it('the state still wins over any peak', () => {
+    assert.equal(readingLabel(reading(0.2, 1, 'read')), 'przeczytane');
+  });
+});
+
+describe('resuming reads the last place, not the peak', () => {
+  it('returns to the last place even when the peak is far ahead', () => {
+    assert.equal(resumePosition(reading(0.2, 0.8)), 0.2);
+  });
+
+  it('a peak at the end does not stop it resuming mid-lesson', () => {
+    assert.equal(resumePosition(reading(0.4, 1)), 0.4);
   });
 });
