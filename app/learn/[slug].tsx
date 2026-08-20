@@ -166,13 +166,22 @@ export default function LessonScreen() {
    */
   useFocusEffect(
     useCallback(() => {
+      // Android keeps JS timers running while the app sits in the background, so pausing on
+      // the way out is not enough on its own: the pause drops the first gap, and the ticks
+      // after it would credit the rest of the time in the pocket, half a second at a time.
+      // Hence the flag as well — the tick has to know the app is in front of the reader.
+      // Defaults to counting unless the state is known not to be active, so an unexpected
+      // value can't leave a foreground lesson silently earning nothing.
+      let active = AppState.currentState !== 'background' && AppState.currentState !== 'inactive';
+
       const tick = setInterval(() => {
         const shown = dwell.current.shown;
-        if (shown !== null) track(shown);
+        if (active && shown !== null) track(shown);
       }, 500);
 
       const subscription = AppState.addEventListener('change', (state) => {
-        if (state !== 'active') dwell.current = pause(dwell.current);
+        active = state === 'active';
+        if (!active) dwell.current = pause(dwell.current);
       });
 
       return () => {
