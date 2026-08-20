@@ -1,6 +1,6 @@
-import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
+import { Stack, useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { AppState, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { WebView, type WebViewMessageEvent, type WebViewNavigation } from 'react-native-webview';
 
 import { FindBar, useFindInPage } from '../../src/components/FindBar';
@@ -12,16 +12,23 @@ import { schematicScript } from '../../src/content/schematicScript';
 import { openInAppBrowser } from '../../src/content/openSource';
 import { contentDirUri, lessonFileUri } from '../../src/content/materialize';
 import { SCROLL_PROPS } from '../../src/content/webviewProps';
-import { parseScrollMessage, readingScript } from '../../src/content/readingScript';
+import { parseReadingSample, readingScript } from '../../src/content/readingScript';
 import { content } from '../../src/content/store';
 import {
   READ_THRESHOLD,
   type ReadingState,
   loadReading,
   resumePosition,
+  saveConfirmedProgress,
   saveReadingPosition,
   setReadingState,
 } from '../../src/db/reading';
+import {
+  type Viewport,
+  newDwell,
+  pause,
+  sample as takeSample,
+} from '../../src/engine/readingDwell';
 import { plural } from '../../src/engine/plural';
 import { fileUrlToHref, isSameDocument, resolveLink, routeFor } from '../../src/navigation/links';
 import { useTheme } from '../../src/theme';
@@ -48,6 +55,12 @@ export default function LessonScreen() {
   const [startPosition, setStartPosition] = useState<number | null>(null);
   const [readState, setReadState] = useState<ReadingState | null>(null);
 
+  // How long each piece of the lesson has been on screen during this visit. Lives here and
+  // nowhere else: only the peak it produces is worth keeping between visits.
+  const dwell = useRef(newDwell(0));
+  const savedPeak = useRef(0);
+  const pageHeight = useRef(0);
+
   useEffect(() => {
     let cancelled = false;
 
@@ -55,6 +68,9 @@ export default function LessonScreen() {
       if (cancelled) return;
       setStartPosition(resumePosition(reading));
       setReadState(reading?.state ?? null);
+      dwell.current = newDwell(reading?.maxPosition ?? 0);
+      savedPeak.current = reading?.maxPosition ?? 0;
+      pageHeight.current = 0;
     });
 
     return () => {
@@ -88,6 +104,26 @@ export default function LessonScreen() {
     [router, theme],
   );
 
+  /**
+   * Takes in one sample of where the reader is, and persists the peak when it moves.
+   *
+   * The peak advances a segment at a time, so writing on advance is a handful of writes per
+   * lesson rather than one per sample.
+   */
+  const track = useCallback(
+    (viewport: Viewport) => {
+      dwell.current = takeSample(dwell.current, viewport, Date.now());
+      const confirmed = dwell.current.confirmed;
+      if (confirmed <= savedPeak.current) return;
+
+      savedPeak.current = confirmed;
+      void saveConfirmedProgress(slug, confirmed);
+      if (confirmed >= READ_THRESHOLD) setReadState('read');
+      else setReadState((current) => current ?? 'started');
+    },
+    [slug],
+  );
+
   const acceptFind = find.accept;
 
   const onMessage = useCallback(
@@ -100,20 +136,63 @@ export default function LessonScreen() {
         return;
       }
 
-      const position = parseScrollMessage(event.nativeEvent.data);
-      if (position === null) return;
+      const reading = parseReadingSample(event.nativeEvent.data);
+      if (reading === null) return;
 
-      void saveReadingPosition(slug, position);
-      if (position >= READ_THRESHOLD) setReadState('read');
-      else setReadState((current) => current ?? 'started');
+      // A reflow — a rotation, or a change of system font size — moves every place in the
+      // document, so counters gathered against the old layout no longer describe the text
+      // they were counted for. The peak survives; only the partial time is dropped.
+      if (reading.height > 0) {
+        const previous = pageHeight.current;
+        if (previous > 0 && Math.abs(reading.height - previous) > previous * 0.02) {
+          dwell.current = newDwell(dwell.current.confirmed);
+        }
+        pageHeight.current = reading.height;
+      }
+
+      void saveReadingPosition(slug, reading.position);
+      track(reading);
     },
-    [slug, openLink, acceptFind],
+    [slug, openLink, acceptFind, track],
+  );
+
+  /**
+   * Keeps counting while the reader sits still.
+   *
+   * At the bottom of a lesson no further scroll event ever arrives, and a lesson shorter than
+   * the screen fires none at all, so "this text has been on screen for two seconds" has to be
+   * able to become true without any movement. It counts only while the lesson is in front of
+   * the reader: a lesson left open in a pocket must not earn progress.
+   */
+  useFocusEffect(
+    useCallback(() => {
+      const tick = setInterval(() => {
+        const shown = dwell.current.shown;
+        if (shown !== null) track(shown);
+      }, 500);
+
+      const subscription = AppState.addEventListener('change', (state) => {
+        if (state !== 'active') dwell.current = pause(dwell.current);
+      });
+
+      return () => {
+        clearInterval(tick);
+        subscription.remove();
+        dwell.current = pause(dwell.current);
+      };
+    }, [track]),
   );
 
   const toggleRead = useCallback(() => {
     const next: ReadingState = readState === 'read' ? 'started' : 'read';
     setReadState(next);
     void setReadingState(slug, next);
+    // Marking it read by hand puts the peak at the end, so the tracker has nothing left to
+    // raise and won't write over the state that was just chosen.
+    if (next === 'read') {
+      dwell.current = newDwell(1);
+      savedPeak.current = 1;
+    }
   }, [readState, slug]);
 
   /**

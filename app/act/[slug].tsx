@@ -27,7 +27,7 @@ import { openInAppBrowser } from '../../src/content/openSource';
 import { findHelpersScript } from '../../src/content/findInPage';
 import { applyVersions, dateLabel, unitLabel } from '../../src/content/versions';
 import { SCROLL_PROPS } from '../../src/content/webviewProps';
-import { parseScrollMessage, readingScript } from '../../src/content/readingScript';
+import { parseReadingSample, readingScript } from '../../src/content/readingScript';
 import { loadActPosition, saveActPosition } from '../../src/db/reading';
 import { lessonCss, useTheme } from '../../src/theme';
 import { useSettings } from '../../src/settings/SettingsContext';
@@ -210,8 +210,9 @@ export default function ActScreen() {
         return;
       }
 
-      const position = parseScrollMessage(event.nativeEvent.data);
-      if (position !== null) void saveActPosition(slug, position);
+      // An act keeps a bookmark, not progress, so the position is all it takes from a sample.
+      const reading = parseReadingSample(event.nativeEvent.data);
+      if (reading !== null) void saveActPosition(slug, reading.position);
     },
     [slug, acceptFind],
   );
