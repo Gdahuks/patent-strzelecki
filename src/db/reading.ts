@@ -28,13 +28,14 @@ function fraction(value: number): number {
 }
 
 function rowToReading(row: { position: number; max_position: number; state: string }): Reading {
-  const position = fraction(row.position);
-
   return {
-    position,
-    // Never below the last position: a row written before the peak existed has both equal,
-    // and a peak behind the current place would mean progress had gone backwards.
-    maxPosition: Math.max(position, fraction(row.max_position)),
+    position: fraction(row.position),
+    // The stored peak, and nothing else. Raising it to the last position here — which an
+    // earlier version did, to cover rows written before the peak existed — hands the fling
+    // its progress straight back: the last position follows every fling, so a lesson flung
+    // to the end reported 100%. Rows from before the split get their peak seeded by
+    // `migrateReadingToConfirmedPeak`, which is where that one-off belongs.
+    maxPosition: fraction(row.max_position),
     state: row.state === 'read' ? 'read' : 'started',
   };
 }

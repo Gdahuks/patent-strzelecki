@@ -91,6 +91,12 @@ describe('the label reads the confirmed peak, not the last place', () => {
     assert.equal(readingLabel(reading(0.2, 0.8)), 'w trakcie · 80%');
   });
 
+  it('a last position ahead of the peak does not raise the percentage', () => {
+    // Flinging to the end moves the last position but confirms nothing, so the label has to
+    // report the peak alone. Reading the two together once gave a flung lesson 100%.
+    assert.equal(readingLabel(reading(1, 0.2)), 'w trakcie · 20%');
+  });
+
   it('a peak below three percent is only "started"', () => {
     assert.equal(readingLabel(reading(0, 0.02)), 'zaczęte');
   });
