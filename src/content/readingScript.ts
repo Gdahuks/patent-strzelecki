@@ -10,6 +10,15 @@
 /** How often the page reports its position. Less often than a frame, more often than a blink. */
 const REPORT_INTERVAL_MS = 400;
 
+/**
+ * How long after the last scroll event the page reports where it came to rest.
+ *
+ * Without this the saved position was whatever the rate limit happened to catch mid-fling —
+ * and at the bottom of a lesson no further scroll event ever arrives, so a fling ended with
+ * a position from halfway down and the lesson resumed there.
+ */
+const IDLE_MS = 250;
+
 export function readingScript(startPosition: number): string {
   const start = Math.min(1, Math.max(0, startPosition));
 
@@ -21,9 +30,16 @@ export function readingScript(startPosition: number): string {
   }
 
   function report() {
+    var height = document.body.scrollHeight;
     window.ReactNativeWebView.postMessage(JSON.stringify({
       type: 'scroll',
-      position: window.scrollY / maxScroll()
+      position: window.scrollY / maxScroll(),
+      // The screen's height as a fraction of the page: the reader sees a band of text, not a
+      // point, and the whole band is what counts as time on screen.
+      view: height > 0 ? Math.min(1, window.innerHeight / height) : 1,
+      // The page height itself, so the screen can tell the text has been reflowed. A rotation
+      // or a change of system font size moves every place in the document.
+      height: height
     }));
   }
 
@@ -37,25 +53,44 @@ export function readingScript(startPosition: number): string {
   }
 
   var last = 0;
+  var idle = null;
   window.addEventListener('scroll', function () {
     var now = Date.now();
+    // The stream stays rate-limited; the idle timer adds one report per scroll, so where the
+    // reader came to rest is known even when it falls between two samples.
+    if (idle !== null) clearTimeout(idle);
+    idle = setTimeout(report, ${IDLE_MS});
     if (now - last < ${REPORT_INTERVAL_MS}) return;
     last = now;
     report();
   }, { passive: true });
 
-  // A lesson shorter than the screen never fires a single scroll event, and yet it
-  // counts as read the moment it's opened.
-  if (document.body.scrollHeight <= window.innerHeight + 8) {
-    window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'scroll', position: 1 }));
-  }
+  // One report before any scrolling: the reading tracker needs a window to measure time
+  // against, and a lesson shorter than the screen never fires a scroll event at all. The
+  // repeat covers images settling, which changes the page height.
+  report();
+  setTimeout(report, 1000);
 
   true;
 })();`;
 }
 
-/** Reads the position from a message posted by the page. Returns null for anything else. */
-export function parseScrollMessage(raw: string): number | null {
+/** One reading of where the page is. */
+export interface ReadingSample {
+  /** Scroll fraction, 0..1. */
+  position: number;
+  /** The screen's height as a fraction of the page. Zero when the page didn't say. */
+  view: number;
+  /** The page's total height in pixels. Zero when the page didn't say. */
+  height: number;
+}
+
+function fraction(value: unknown): number {
+  return typeof value === 'number' && Number.isFinite(value) ? Math.min(1, Math.max(0, value)) : 0;
+}
+
+/** Reads a sample posted by the page. Returns null for anything else. */
+export function parseReadingSample(raw: string): ReadingSample | null {
   try {
     const parsed: unknown = JSON.parse(raw);
     if (
@@ -69,7 +104,13 @@ export function parseScrollMessage(raw: string): number | null {
     const position = (parsed as { position?: unknown }).position;
     if (typeof position !== 'number' || !Number.isFinite(position)) return null;
 
-    return Math.min(1, Math.max(0, position));
+    const height = (parsed as { height?: unknown }).height;
+
+    return {
+      position: Math.min(1, Math.max(0, position)),
+      view: fraction((parsed as { view?: unknown }).view),
+      height: typeof height === 'number' && Number.isFinite(height) && height > 0 ? height : 0,
+    };
   } catch {
     return null;
   }
