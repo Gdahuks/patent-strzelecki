@@ -120,11 +120,14 @@ async function migrateAttemptsToProfiles(database: SQLite.SQLiteDatabase): Promi
 /**
  * Splits the reading position into "where I stopped" and "how far I got".
  *
- * The peak is seeded from the position already saved: for a lesson in progress that is the
- * furthest place its reader has been, so nobody's percentage drops after the update. It is a
- * statement about old rows, which is why it appears in the `INSERT ... SELECT` rather than as
- * a column default — a later insert that forgets the peak should fail, not quietly claim the
- * reader had been there.
+ * The peak is seeded from the position already saved. That is **not** the furthest place its
+ * reader reached — the old column held the last one, which is the very bug this split fixes —
+ * but it is the number the old label showed, so seeding from it means nobody's percentage
+ * changes on update. Don't read a seeded peak as evidence the reader was ever that far.
+ *
+ * It is a statement about old rows, which is why it appears in the `INSERT ... SELECT` rather
+ * than as a column default — a later insert that forgets the peak should fail, not quietly
+ * claim the reader had been there.
  */
 async function migrateReadingToConfirmedPeak(database: SQLite.SQLiteDatabase): Promise<void> {
   const columns = await database.getAllAsync<{ name: string }>(

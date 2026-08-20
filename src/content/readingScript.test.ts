@@ -45,6 +45,15 @@ describe('readingScript reports where scrolling stopped', () => {
     assert.match(script, /height: height/);
   });
 
+  it('marks the samples it sends on load as unasked-for', () => {
+    // The screen takes the window from them but leaves the position alone, so opening a lesson
+    // and closing it straight away leaves no trace.
+    const script = readingScript(0);
+
+    assert.match(script, /report\(true\)/);
+    assert.match(script, /initial: initial === true/);
+  });
+
   it('reports once at the start, whatever the page height', () => {
     // The tracker needs a window to measure against before the first scroll, and a lesson
     // shorter than the screen never fires a scroll event at all.
@@ -58,17 +67,19 @@ describe('parseReadingSample', () => {
   it('reads a well-formed sample', () => {
     assert.deepEqual(
       parseReadingSample('{"type":"scroll","position":0.33,"view":0.2,"height":8000}'),
-      { position: 0.33, view: 0.2, height: 8000 },
+      { initial: false, position: 0.33, view: 0.2, height: 8000 },
     );
   });
 
   it('clamps the fractions to range', () => {
     assert.deepEqual(parseReadingSample('{"type":"scroll","position":1.4,"view":3}'), {
+      initial: false,
       position: 1,
       view: 1,
       height: 0,
     });
     assert.deepEqual(parseReadingSample('{"type":"scroll","position":-0.2,"view":-1}'), {
+      initial: false,
       position: 0,
       view: 0,
       height: 0,
@@ -77,6 +88,7 @@ describe('parseReadingSample', () => {
 
   it('treats a missing viewport height as unknown, not as the whole page', () => {
     assert.deepEqual(parseReadingSample('{"type":"scroll","position":0.5}'), {
+      initial: false,
       position: 0.5,
       view: 0,
       height: 0,
@@ -85,6 +97,13 @@ describe('parseReadingSample', () => {
 
   it('treats a missing page height as unknown, so nothing looks like a reflow', () => {
     assert.equal(parseReadingSample('{"type":"scroll","position":0.5,"view":0.1}')?.height, 0);
+  });
+
+  it('carries the unasked-for marker through', () => {
+    assert.equal(
+      parseReadingSample('{"type":"scroll","position":0,"view":0.3,"initial":true}')?.initial,
+      true,
+    );
   });
 
   it('ignores a message of another kind', () => {

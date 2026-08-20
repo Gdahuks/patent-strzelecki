@@ -150,7 +150,10 @@ export default function LessonScreen() {
         pageHeight.current = reading.height;
       }
 
-      void saveReadingPosition(slug, reading.position);
+      // The position is only saved for movement the reader caused. The samples the page sends
+      // on load exist to give the tracker a window, and writing them would leave "zaczęte" on
+      // a lesson that was opened by accident and closed straight away.
+      if (!reading.initial) void saveReadingPosition(slug, reading.position);
       track(reading);
     },
     [slug, openLink, acceptFind, track],
@@ -180,7 +183,9 @@ export default function LessonScreen() {
       }, 500);
 
       const subscription = AppState.addEventListener('change', (state) => {
-        active = state === 'active';
+        // Same test as the initialisation above, and for the same reason: only a state known
+        // to be away from the reader stops the counting.
+        active = state !== 'background' && state !== 'inactive';
         if (!active) dwell.current = pause(dwell.current);
       });
 
@@ -198,10 +203,11 @@ export default function LessonScreen() {
     void setReadingState(slug, next);
     // Marking it read by hand puts the peak at the end, so the tracker has nothing left to
     // raise and won't write over the state that was just chosen.
-    if (next === 'read') {
-      dwell.current = newDwell(1);
-      savedPeak.current = 1;
-    }
+    // The tracker only ever writes a peak that beats the stored one, so its in-memory copy has
+    // to follow the state chosen by hand — otherwise unmarking a lesson would leave the peak at
+    // the end and the tracker could never mark it read again.
+    dwell.current = newDwell(next === 'read' ? 1 : 0);
+    savedPeak.current = next === 'read' ? 1 : 0;
   }, [readState, slug]);
 
   /**

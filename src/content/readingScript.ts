@@ -29,10 +29,14 @@ export function readingScript(startPosition: number): string {
     return Math.max(1, document.body.scrollHeight - window.innerHeight);
   }
 
-  function report() {
+  function report(initial) {
     var height = document.body.scrollHeight;
     window.ReactNativeWebView.postMessage(JSON.stringify({
       type: 'scroll',
+      // A sample the reader didn't ask for: sent on load, so the tracker has a window to
+      // measure time against. The screen takes the window and leaves the position alone —
+      // opening a lesson and closing it must not leave a trace.
+      initial: initial === true,
       position: window.scrollY / maxScroll(),
       // The screen's height as a fraction of the page: the reader sees a band of text, not a
       // point, and the whole band is what counts as time on screen.
@@ -67,9 +71,10 @@ export function readingScript(startPosition: number): string {
 
   // One report before any scrolling: the reading tracker needs a window to measure time
   // against, and a lesson shorter than the screen never fires a scroll event at all. The
-  // repeat covers images settling, which changes the page height.
-  report();
-  setTimeout(report, 1000);
+  // repeat covers images settling, which changes the page height. Both are marked as
+  // unasked-for, so neither writes a reading position.
+  report(true);
+  setTimeout(function () { report(true); }, 1000);
 
   true;
 })();`;
@@ -77,6 +82,8 @@ export function readingScript(startPosition: number): string {
 
 /** One reading of where the page is. */
 export interface ReadingSample {
+  /** True for a sample the page sent on load, not one the reader caused by scrolling. */
+  initial: boolean;
   /** Scroll fraction, 0..1. */
   position: number;
   /** The screen's height as a fraction of the page. Zero when the page didn't say. */
@@ -107,6 +114,7 @@ export function parseReadingSample(raw: string): ReadingSample | null {
     const height = (parsed as { height?: unknown }).height;
 
     return {
+      initial: (parsed as { initial?: unknown }).initial === true,
       position: Math.min(1, Math.max(0, position)),
       view: fraction((parsed as { view?: unknown }).view),
       height: typeof height === 'number' && Number.isFinite(height) && height > 0 ? height : 0,

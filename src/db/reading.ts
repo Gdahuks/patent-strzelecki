@@ -118,9 +118,15 @@ export async function saveConfirmedProgress(slug: string, maxPosition: number): 
 /**
  * Manually sets the state.
  *
- * Marking a lesson as read also moves the position to the end — otherwise the state
- * would say "read" while opening the lesson would jump back to the middle. Unmarking it
- * leaves the position alone, so you can get back to wherever you left off.
+ * Marking a lesson as read also moves the position and the peak to the end — otherwise the
+ * state would say "read" while opening the lesson would jump back to the middle.
+ *
+ * Unmarking **clears the peak** and leaves the position alone: you get back to wherever you
+ * left off, but the lesson counts as unread, which is what the tap said. Keeping the peak
+ * there instead had two consequences, and the second one is the reason for this: a lesson
+ * just declared unread reported "w trakcie · 100%", and — worse — the tracker could never
+ * mark it read again. It only ever writes a peak that beats the stored one, so a peak left at
+ * the end silences it for good, and re-reading the lesson to the end changed nothing.
  */
 export async function setReadingState(slug: string, state: ReadingState): Promise<void> {
   const database = await db();
@@ -140,7 +146,7 @@ export async function setReadingState(slug: string, state: ReadingState): Promis
     `INSERT INTO reading (lesson_slug, position, max_position, state, updated_at)
      VALUES (?, 0, 0, 'started', ?)
      ON CONFLICT(lesson_slug) DO UPDATE SET
-       state = 'started', updated_at = excluded.updated_at`,
+       max_position = 0, state = 'started', updated_at = excluded.updated_at`,
     [slug, Date.now()],
   );
 }
