@@ -97,6 +97,10 @@ version: ## Numbers the build will ship with (version from the tag, build from c
 
 # ── Installing on the phone ──────────────────────────────────────────────────
 
+# `--no-bundler` for the same reason as in the android target: a Release build carries the
+# JS bundle inside the app, so Metro is not needed to run it, and without the flag the
+# command never returns after the install.
+
 # prebuild is a dependency on purpose. Icons and config (app.json plus app.config.js) are
 # compiled into the native project, so without a fresh prebuild the build uses whatever
 # landed in ios/ on the first run — and an icon change has no effect at all. The same goes
@@ -107,21 +111,26 @@ ios: prebuild ## Release build and install on the iPhone (works afterwards witho
 	  printf 'Not sure what to install onto. Set PATENT_DEVICE in your shell profile\n'; \
 	  printf 'or pass it for one run: make ios DEVICE="device name"\n'; \
 	  printf 'Names of connected devices: make doctor\n'; exit 1; }
-	npx expo run:ios --device "$(DEVICE)" --configuration Release
+	npx expo run:ios --device "$(DEVICE)" --configuration Release --no-bundler
 
 ios-sim: prebuild ## Release build on the simulator — a quick check before installing on the phone
-	npx expo run:ios --device "iPhone 17 Pro" --configuration Release
+	npx expo run:ios --device "iPhone 17 Pro" --configuration Release --no-bundler
 
 prebuild: ## Copy config and icons into the native ios/ project
 	npx expo prebuild -p ios
 
 # ── Android ──────────────────────────────────────────────────────────────────
 
+# A release build carries the JS bundle inside the APK, so Metro is not needed to run it.
+# Without `--no-bundler` the command stays in the foreground serving a bundler nobody talks
+# to, and the target never returns after the install (and holds port 8081, which the route
+# types need).
+#
 # The emulator has to already be running — start it with make android-emu or from the
 # Device Manager in Android Studio. `expo run:android` picks whichever device is connected
 # on its own, so this one target installs onto both an emulator and a physical phone.
 android: prebuild-android drop-stale-bundle ## Release build onto the emulator or a connected Android phone
-	npx expo run:android --variant release
+	npx expo run:android --variant release --no-bundler
 
 # Gradle keeps the JS bundle it compiled last time under android/app/build, and decides
 # whether that task is up to date from its own inputs — not from assets/content/content.json.
