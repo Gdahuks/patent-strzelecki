@@ -1,0 +1,47 @@
+name: Pages
+
+# GitHub's built-in "deploy from a branch" mode rebuilds the site on every push to main, with
+# no way to filter by path — a one-line change in the Makefile redeployed a privacy policy
+# nobody had touched. Publishing through a workflow lets the trigger name what the site is
+# actually made of.
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'docs/**'
+      - '.github/workflows/pages.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# A queued run waits for the one in flight rather than cancelling it. The privacy policy is
+# the address Google Play holds on file, so a half-finished deployment is worse than a slow one.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/configure-pages@v5
+
+      # Jekyll, because the pages are Markdown and the branch-based build ran Jekyll as well.
+      # Without it the files would be served as raw .md instead of rendered HTML.
+      - uses: actions/jekyll-build-pages@v1
+        with:
+          source: ./docs
+          destination: ./_site
+
+      - uses: actions/upload-pages-artifact@v3
+
+      - id: deployment
+        uses: actions/deploy-pages@v4
