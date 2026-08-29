@@ -122,8 +122,14 @@ dewelopera. Ustawienia → Ogólne → VPN i zarządzanie urządzeniem → wpis 
 <twój email>` → Zaufaj.
 
 **Czas życia.** Na darmowym Apple ID profil wygasa **po 7 dniach** i aplikacja przestaje się
-otwierać — trzeba powtórzyć `expo run:ios`. Płatne konto Apple Developer daje profil na rok
-i dostęp do TestFlight, czyli instalację bez kabla i bez trybu dewelopera.
+otwierać — trzeba powtórzyć `make ios`. Nowy profil robi się przy tym sam, bez zaglądania do
+Xcode: `make ios` podstawia xcodebuildowi skrypt z `scripts/xcode-shim/`, który dokłada
+`-allowProvisioningUpdates`. Samo `expo run:ios` przekazuje tę flagę tylko przy pierwszym
+uruchomieniu, kiedy jeszcze samo wpisuje zespół do projektu; potem uznaje podpis za załatwiony
+i flagi już nie dokłada, więc ósmego dnia build kończył się `No profiles for … were found`.
+
+Płatne konto Apple Developer daje profil na rok i dostęp do TestFlight, czyli instalację bez
+kabla i bez trybu dewelopera.
 
 ## Android
 
