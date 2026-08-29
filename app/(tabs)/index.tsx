@@ -224,23 +224,17 @@ export default function NaukaScreen() {
             onPress={() => router.push(`/learn/${item.slug}`)}
             onLongPress={() => onLongPress(item, state)}
             longPressLabel="Zmień lub wyczyść stan lekcji"
-            // The state marker is "✓" or "◐" — a screen reader announces those as character
-            // names ("check mark", "circle half filled"), which says nothing about the
-            // lesson. The summary has to be spelled out here: a container's own
-            // accessibility label replaces the text built from its children, so without it
-            // the row lost the set count and question count entirely.
+            // A container's own accessibility label replaces the text built from its
+            // children, so the summary and the reading state have to be spelled out here —
+            // without it the row lost the set count and question count entirely.
             accessibilityLabel={`${item.title}. ${summary}${label ? `. ${label}` : ''}`}
           >
             <View style={styles.row}>
-              {/* A marker instead of a number once the lesson has some reading state —
-                  the number can still be inferred from position in the list anyway. */}
-              {state?.state === 'read' ? (
-                <Text style={[styles.order, { color: theme.good }]}>✓</Text>
-              ) : state ? (
-                <Text style={[styles.order, { color: theme.accent }]}>◐</Text>
-              ) : (
-                <Text style={[styles.order, { color: theme.muted }]}>{item.order}</Text>
-              )}
+              {/* Always the number. A state marker (✓, ◐) used to replace it, and with one
+                  lesson read the list looked like it had a gap in its numbering — while the
+                  state is already spelled out in words under the title, so the marker said
+                  the same thing twice. */}
+              <Text style={[styles.order, { color: theme.muted }]}>{item.order}</Text>
 
               <View style={styles.grow}>
                 <Title>{item.title}</Title>
