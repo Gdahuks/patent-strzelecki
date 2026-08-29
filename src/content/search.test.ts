@@ -452,6 +452,13 @@ describe('the mark on a hit', () => {
     assert.equal(answer.slice(hit.answerMark[0], hit.answerMark[1]), 'Komendant');
   });
 
+  it('a phrase found only in a wrong answer gives no hit at all', () => {
+    // The card shows the question and the correct answer; a hit in a distractor had nothing
+    // on the card to explain it — and pointed the learner at the very thing not to remember.
+    assert.deepEqual(searchQuestions(QUESTIONS, 'pzss'), []);
+    assert.deepEqual(searchQuestions(QUESTIONS, 'ucieczka'), []);
+  });
+
   it('a lesson hit marks the phrase with its diacritics', () => {
     const hit = searchLessons(LESSONS, 'bron').find((h) => h.lesson.slug === 'uobia');
 

@@ -277,8 +277,14 @@ export function markedExcerptAround(
   return markedExcerptAt(text, findAtWordStart(fold(text), needle), needle.length, radius);
 }
 
+/**
+ * What a question is searched by: its text, the correct answer and the legal basis — the
+ * three things its result card shows. Wrong answers used to be in here too, and a hit in
+ * one of them put the question on the list with nothing on the card to explain why; it also
+ * pointed the learner at the very thing not to remember.
+ */
 function questionHaystack(question: Question): string {
-  return [question.question, ...Object.values(question.answers), question.law]
+  return [question.question, question.answers[question.correct], question.law]
     .filter(Boolean)
     .join(' ');
 }
