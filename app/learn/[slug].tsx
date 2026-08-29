@@ -12,7 +12,7 @@ import { schematicScript } from '../../src/content/schematicScript';
 import { openInAppBrowser } from '../../src/content/openSource';
 import { contentDirUri, lessonFileUri } from '../../src/content/materialize';
 import { SCROLL_PROPS } from '../../src/content/webviewProps';
-import { parseReadingSample, readingScript } from '../../src/content/readingScript';
+import { parseReadingSample, readerPosition, readingScript } from '../../src/content/readingScript';
 import { content } from '../../src/content/store';
 import {
   READ_THRESHOLD,
@@ -153,7 +153,8 @@ export default function LessonScreen() {
       // The position is only saved for movement the reader caused. The samples the page sends
       // on load exist to give the tracker a window, and writing them would leave "zaczęte" on
       // a lesson that was opened by accident and closed straight away.
-      if (!reading.initial) void saveReadingPosition(slug, reading.position);
+      const position = readerPosition(reading);
+      if (position !== null) void saveReadingPosition(slug, position);
       track(reading);
     },
     [slug, openLink, acceptFind, track],

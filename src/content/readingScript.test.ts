@@ -1,7 +1,10 @@
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { describe, it } from 'vitest';
 
-import { parseReadingSample, readingScript } from './readingScript';
+import { parseReadingSample, readerPosition, readingScript } from './readingScript';
 
 describe('readingScript', () => {
   it('embeds the starting position', () => {
@@ -113,5 +116,34 @@ describe('parseReadingSample', () => {
   it('ignores anything that is not a message', () => {
     assert.equal(parseReadingSample('nonsense'), null);
     assert.equal(parseReadingSample('{"type":"scroll"}'), null);
+  });
+});
+
+describe('readerPosition', () => {
+  const sample = (initial: boolean) =>
+    parseReadingSample(
+      JSON.stringify({ type: 'scroll', position: 0.4, view: 0.1, height: 5000, initial }),
+    );
+
+  it('gives the position of a sample the reader caused', () => {
+    assert.equal(readerPosition(sample(false)!), 0.4);
+  });
+
+  it('gives nothing for a sample the page sent on load', () => {
+    // Both screens save from this: a lesson opened and closed at once leaves no „zaczęte",
+    // and an act opened from a legal basis keeps the bookmark the reader left in it.
+    assert.equal(readerPosition(sample(true)!), null);
+  });
+
+  it('is the only way a screen takes a position from a sample', () => {
+    // The act screen once saved `reading.position` straight from every sample while the
+    // lesson screen filtered the load-time ones — and the two drifted apart unnoticed. Read
+    // as text, since the screens pull in React Native and stay outside vitest's reach.
+    const root = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
+    for (const file of ['app/act/[slug].tsx', 'app/learn/[slug].tsx']) {
+      const source = readFileSync(join(root, file), 'utf8');
+      assert.match(source, /readerPosition\(/, file);
+      assert.doesNotMatch(source, /reading\.(position|initial)\b/, file);
+    }
   });
 });
