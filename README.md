@@ -207,6 +207,27 @@ wersja jest z `app.json`, a numer builda to `1`.
 Poprawka wysłana do sklepu **wymaga nowego commita**, nie tylko przebudowania — bez commita
 numer builda się nie zmienia.
 
+### Wydanie przez pipeline
+
+Zamiast `make android-aab` i ręcznych sprawdzeń w gotowym pliku:
+
+```sh
+make release TAG=v1.1.0 SKIP_E2E=1
+```
+
+Buduje paczkę **z tagu, w świeżym worktree** (nie w katalogu `android/`, który pamięta
+poprzednie buildy), uruchamia testy z paczką treści na miejscu, a potem sprawdza gotowy plik —
+pakiet, wersję, `versionCode`, uprawnienia, podpis, wersję treści w bundlu, architektury,
+mapę R8 — i zapisuje wynik do `checks.md` obok AAB w `~/Releases/patent-strzelecki/<tag>/`
+(zmienna `PATENT_RELEASES_DIR`). Cały przebieg trwa kilka minut. Każda niezgodność zatrzymuje
+pipeline z komunikatem; nic nie przechodzi po cichu. Po wgraniu do Play:
+`make release-uploaded TAG=…` — następne wydanie porównuje się z tym. `SKIP_E2E=1` jest dziś
+obowiązkowe (testy na emulatorze dopiero powstają) i zostawia w `checks.md` wytłuszczone
+„NIEZWERYFIKOWANE".
+
+Paczkę treści pipeline bierze z `assets/content` (albo `PATENT_CONTENT_DIR`) — patrz „Skąd się
+bierze treść".
+
 ### Uprawnienia Androida
 
 Wydanie deklaruje **zero uprawnień**. Pięć wnoszonych przez zależności (`INTERNET`,

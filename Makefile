@@ -386,6 +386,13 @@ doctor: ## Check the environment: tools, signing, devices, content bundle
 	  else echo '—'; fi
 	@if [ -x $(ANDROID_SDK)/platform-tools/adb ]; then \
 	  $(ANDROID_SDK)/platform-tools/adb devices | tail -n +2 | grep . || echo 'nothing running'; fi
+# The two silenced streams below are "not installed yet" and "no releases directory yet":
+# doctor reports what is missing, it never stops on it.
+	@printf '\n── Release pipeline ──\n'
+	@printf '%-14s ' 'node/.nvmrc'; printf '%s wanted, %s present\n' "$$(cat .nvmrc)" "$$(node --version 2>/dev/null || echo none)"
+	@printf '%-14s %s\n' 'releases' '$(RELEASES_DIR)'
+	@printf '%-14s ' 'bundletool'; ls '$(RELEASES_DIR)/tools/' 2>/dev/null | grep bundletool || echo 'not downloaded yet (make release-preflight fetches it)'
+	@printf '%-14s %s\n' 'content dir' '$(CONTENT_DIR)'
 	@printf '\n── Content bundle ──\n'
 	@if [ -f assets/content/manifest.json ]; then cat assets/content/manifest.json; \
 	  else printf 'MISSING — see "Skąd się bierze treść" in README.md\n'; fi
