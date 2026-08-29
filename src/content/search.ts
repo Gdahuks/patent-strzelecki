@@ -13,17 +13,35 @@ import type { Lesson, Question } from './types';
 /** Shorter queries produce hundreds of hits and add nothing useful. */
 export const MIN_QUERY_LENGTH = 3;
 
+/**
+ * Where the phrase sits **inside the excerpt** — `[start, end)` in the excerpt's own
+ * characters, leading ellipsis included — or null when the excerpt has no match to show
+ * (a lesson found only by its title). The card bolds this range; without it the matched
+ * word was set exactly like the words around it and had to be found by eye.
+ */
+export type Mark = readonly [number, number] | null;
+
 export interface QuestionHit {
   kind: 'question';
   question: Question;
-  /** The excerpt where the match landed — shown in the list. */
-  excerpt: string;
+  /**
+   * Where the phrase sits in the question's own text, which the card shows whole — or null
+   * when the match landed in the correct answer or in the legal basis.
+   */
+  questionMark: Mark;
+  /**
+   * Where the phrase sits in the correct answer, which the card also shows — or null when
+   * it isn't there. With both this and `questionMark` null, the match fell in the legal
+   * basis, which the card shows as the link under the answer.
+   */
+  answerMark: Mark;
 }
 
 export interface LessonHit {
   kind: 'lesson';
   lesson: Lesson;
   excerpt: string;
+  mark: Mark;
   /**
    * How many matches the lesson can actually highlight. Zero means "the phrase is there,
    * but can't be marked": it falls in the title, or straddles a tag.
@@ -180,20 +198,29 @@ function matches(text: string, needle: string): boolean {
 }
 
 /**
- * An excerpt around a known match position, trimmed to word boundaries.
+ * An excerpt around a known match position, trimmed to word boundaries, plus where the
+ * phrase landed in it.
  *
- * Kept separate from `excerptAround`, where the position is computed by `fold`-ing the whole
- * text. Whoever already has the folded text and the position — which is the case for acts,
- * where folding 700 KB on every keystroke of the phrase would be the screen's most expensive
- * operation — calls this directly.
+ * It takes a position, not a phrase: the caller has already `fold`-ed the text and found the
+ * match, and for acts that folding — 700 KB of it — is the one thing that must not happen
+ * again on every keystroke. The mark is recomputed from that position rather than searched
+ * for: the excerpt is cut and gets an ellipsis, so `at` in the source text is not `at` in
+ * the excerpt. It's a range in the excerpt exactly because `fold` keeps the character count —
+ * the matched phrase is as long in the original as in the folded text, so `length` carries
+ * over unchanged.
  */
-export function excerptAt(text: string, at: number, length: number, radius = 60): string {
+export function markedExcerptAt(
+  text: string,
+  at: number,
+  length: number,
+  radius = 60,
+): { text: string; mark: Mark } {
   // With no match, only the beginning is left — that's what a lesson found only by its
   // title looks like. The ellipsis is mandatory here: without it, the excerpt read like a
   // paragraph cut off mid-sentence, i.e. like a data bug.
   if (at < 0) {
     const head = text.slice(0, radius * 2).trim();
-    return head.length < text.trim().length ? `${head}…` : head;
+    return { text: head.length < text.trim().length ? `${head}…` : head, mark: null };
   }
 
   let start = Math.max(0, at - radius);
@@ -212,20 +239,24 @@ export function excerptAt(text: string, at: number, length: number, radius = 60)
     if (space >= at + length) end = space;
   }
 
-  return `${start > 0 ? '…' : ''}${text.slice(start, end).trim()}${end < text.length ? '…' : ''}`;
+  // `trimEnd()`, not `trim()`: dropping leading whitespace would shift the mark. The slice
+  // never starts with whitespace anyway — either at 0 in a text whose whitespace `stripHtml`
+  // and `actText` have already collapsed and trimmed, or right after a space found above.
+  const body = text.slice(start, end).trimEnd();
+  const lead = start > 0 ? '…' : '';
+  const excerpt = `${lead}${body}${end < text.length ? '…' : ''}`;
+  const from = lead.length + (at - start);
+  return { text: excerpt, mark: [from, from + length] };
 }
 
-/** A text excerpt around the first match of the phrase. */
-export function excerptAround(text: string, query: string, radius = 60): string {
-  // The phrase is searched for the same way as matching, i.e. through `normalize`. `fold`
-  // alone doesn't collapse whitespace, so while typing a multi-word phrase, a stray trailing
-  // space used to lose the match and the excerpt fell back to the start of the text.
-  const needle = normalize(query);
-  return excerptAt(text, findAtWordStart(fold(text), needle), needle.length, radius);
-}
-
+/**
+ * What a question is searched by: its text, the correct answer and the legal basis — the
+ * three things its result card shows. Wrong answers used to be in here too, and a hit in
+ * one of them put the question on the list with nothing on the card to explain why; it also
+ * pointed the learner at the very thing not to remember.
+ */
 function questionHaystack(question: Question): string {
-  return [question.question, ...Object.values(question.answers), question.law]
+  return [question.question, question.answers[question.correct], question.law]
     .filter(Boolean)
     .join(' ');
 }
@@ -239,10 +270,17 @@ export function searchQuestions(questions: Question[], query: string): QuestionH
     const haystack = questionHaystack(question);
     if (!matches(haystack, needle)) continue;
 
-    // A match in the question's own text is worth more than one in a distractor, so the
-    // excerpt is shown from the question whenever it lands there.
-    const source = matches(question.question, needle) ? question.question : haystack;
-    hits.push({ kind: 'question', question, excerpt: excerptAround(source, query) });
+    // The card shows the question and the correct answer whole, so each gets its own mark
+    // rather than an excerpt; a match in the legal basis is visible in the link under them.
+    const inQuestion = findAtWordStart(fold(question.question), needle);
+    const correct = question.answers[question.correct] ?? '';
+    const inAnswer = findAtWordStart(fold(correct), needle);
+    hits.push({
+      kind: 'question',
+      question,
+      questionMark: inQuestion >= 0 ? [inQuestion, inQuestion + needle.length] : null,
+      answerMark: inAnswer >= 0 ? [inAnswer, inAnswer + needle.length] : null,
+    });
   }
   return hits;
 }
@@ -311,10 +349,12 @@ export function searchLessons(lessons: Lesson[], query: string): LessonHit[] {
     // screen stops offering to step through matches once that count is zero.
     if (at < 0 && !matches(lesson.title, needle)) continue;
 
+    const { text: excerpt, mark } = markedExcerptAt(text, at, needle.length);
     hits.push({
       kind: 'lesson',
       lesson,
-      excerpt: excerptAt(text, at, needle.length),
+      excerpt,
+      mark,
       count: countHighlights(nodes, needle),
     });
   }

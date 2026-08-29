@@ -97,6 +97,11 @@ version: ## Numbers the build will ship with (version from the tag, build from c
 
 # ── Installing on the phone ──────────────────────────────────────────────────
 
+# A directory holding a single script named `xcodebuild`, put in front of PATH for the
+# phone build only. It exists so the seven-day signing profile renews itself; the whole
+# story is in the script.
+XCODE_SHIM := $(CURDIR)/scripts/xcode-shim
+
 # `--no-bundler` for the same reason as in the android target: a Release build carries the
 # JS bundle inside the app, so Metro is not needed to run it, and without the flag the
 # command never returns after the install.
@@ -106,12 +111,15 @@ version: ## Numbers the build will ship with (version from the tag, build from c
 # landed in ios/ on the first run — and an icon change has no effect at all. The same goes
 # for the build number: without prebuild, every install ships with the old number.
 # prebuild preserves the signing team setting, so there's no need to go back into Xcode.
+#
+# The shim on PATH is what keeps that last sentence true. It hands xcodebuild the flag that
+# lets it renew the seven-day signing profile on its own; the reasoning is in the script.
 ios: prebuild ## Release build and install on the iPhone (works afterwards without a laptop)
 	@test -n '$(DEVICE)' || { \
 	  printf 'Not sure what to install onto. Set PATENT_DEVICE in your shell profile\n'; \
 	  printf 'or pass it for one run: make ios DEVICE="device name"\n'; \
 	  printf 'Names of connected devices: make doctor\n'; exit 1; }
-	npx expo run:ios --device "$(DEVICE)" --configuration Release --no-bundler
+	PATH="$(XCODE_SHIM):$$PATH" npx expo run:ios --device "$(DEVICE)" --configuration Release --no-bundler
 
 ios-sim: prebuild ## Release build on the simulator — a quick check before installing on the phone
 	npx expo run:ios --device "iPhone 17 Pro" --configuration Release --no-bundler

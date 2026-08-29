@@ -13,6 +13,7 @@ import {
 import { announce } from '../src/a11y/announce';
 import { LawLink, lawAccessibilityAction, openLaw } from '../src/components/LawLink';
 import { useBottomInset } from '../src/components/safeArea';
+import { Marked } from '../src/components/Marked';
 import { Muted } from '../src/components/ui';
 import { type ActHit, searchActs, warmActText } from '../src/content/actSearch';
 import { allActs, isReadable } from '../src/content/acts';
@@ -164,7 +165,7 @@ export default function SearchScreen() {
           phrase.trim().length === 0 ? (
             <View style={styles.hint}>
               <Muted>
-                Szukanie obejmuje treść {content.questions.length} pytań wraz z odpowiedziami
+                Szukanie obejmuje treść {content.questions.length} pytań wraz z poprawną odpowiedzią
                 i podstawą prawną, tekst {content.lessons.length} lekcji oraz{' '}
                 {actLabel(allActs().filter(isReadable).length)}. Wielkość liter
                 i polskie znaki nie mają znaczenia — „bron" znajdzie „broń".
@@ -214,7 +215,11 @@ export default function SearchScreen() {
                   ) : null}
                 </View>
                 <Text style={[styles.title, { color: theme.text }]}>{item.lesson.title}</Text>
-                <Text style={[styles.excerpt, { color: theme.muted }]}>{item.excerpt}</Text>
+                <Marked
+                  text={item.excerpt}
+                  mark={item.mark}
+                  style={[styles.excerpt, { color: theme.muted }]}
+                />
                 <Text style={[styles.hintRow, { color: theme.accent }]}>
                   {steppable ? 'Otwórz i przejdź po trafieniach →' : 'Otwórz lekcję →'}
                 </Text>
@@ -275,7 +280,11 @@ export default function SearchScreen() {
                     Przepis {startLabel(item.future)}
                   </Text>
                 ) : null}
-                <Text style={[styles.excerpt, { color: theme.muted }]}>{item.excerpt}</Text>
+                <Marked
+                  text={item.excerpt}
+                  mark={item.mark}
+                  style={[styles.excerpt, { color: theme.muted }]}
+                />
                 <Text style={[styles.hintRow, { color: theme.accent }]}>
                   {steppable ? 'Otwórz i przejdź po trafieniach →' : 'Otwórz akt →'}
                 </Text>
@@ -330,8 +339,16 @@ export default function SearchScreen() {
                 <Text style={[styles.badge, { color: theme.muted }]}>PYTANIE</Text>
 
               </View>
-              <Text style={[styles.title, { color: theme.text }]}>{item.question.question}</Text>
-              <Text style={[styles.answer, { color: theme.good }]}>{correct}</Text>
+              <Marked
+                text={item.question.question}
+                mark={item.questionMark}
+                style={[styles.title, { color: theme.text }]}
+              />
+              <Marked
+                text={correct}
+                mark={item.answerMark}
+                style={[styles.answer, { color: theme.good }]}
+              />
               {item.question.law ? <LawLink law={item.question.law} /> : null}
               {lesson ? (
                 <Text style={[styles.excerpt, { color: theme.accent }]}>{lesson.title} →</Text>

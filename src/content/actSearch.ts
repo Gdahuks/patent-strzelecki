@@ -22,7 +22,8 @@ import type { Act } from './acts';
 import {
   MIN_QUERY_LENGTH,
   countHighlights,
-  excerptAt,
+  type Mark,
+  markedExcerptAt,
   findAtWordStart,
   fold,
   normalize,
@@ -34,6 +35,7 @@ export interface ActHit {
   kind: 'act';
   act: Act;
   excerpt: string;
+  mark: Mark;
   /**
    * How many hits the act can highlight. Zero means "the phrase is there, but can't be
    * marked": it crosses a tag, i.e. a text-node boundary.
@@ -156,10 +158,12 @@ export function searchActs(acts: Act[], query: string): ActHit[] {
     const at = findAtWordStart(folded, needle);
     if (at < 0) continue;
 
+    const { text: excerpt, mark } = markedExcerptAt(text, at, needle.length);
     hits.push({
       kind: 'act',
       act,
-      excerpt: excerptAt(text, at, needle.length),
+      excerpt,
+      mark,
       // Keyed off the first hit, since its surroundings are what the card shows. Later hits
       // can land in other units — from there on, navigation happens inside the open act,
       // where the label sits next to the provision.

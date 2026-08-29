@@ -1,0 +1,25 @@
+#!/bin/sh
+# A stand-in for xcodebuild that puts -allowProvisioningUpdates back on the command line.
+#
+# `expo run:ios` passes that flag only on the run where the CLI itself writes
+# DEVELOPMENT_TEAM into the Xcode project. Afterwards it sees signing as already configured
+# and drops the flag (@expo/cli, src/run/ios/XcodeBuild.ts: the flag is pushed next to the
+# team id, and the team id is returned only when the CLI just set it up).
+#
+# Without the flag xcodebuild may reuse an existing provisioning profile but is not allowed
+# to create one. A free Apple ID gets profiles valid for seven days, so every eighth day the
+# build died with "No profiles for 'io.github.gdahuks.patentstrzelecki' were found" and the
+# only cure was a trip through Xcode, which does allow provisioning updates. With the flag
+# xcodebuild renews the profile by itself and the phone build stays a one-liner.
+#
+# -allowProvisioningDeviceRegistration goes with it: a new profile is only issued for devices
+# on the team's list, and a phone plugged in for the first time is not on it yet.
+#
+# Only real builds get the flags — informational calls such as `xcodebuild -list` carry no
+# -destination, and there is nothing to provision for them.
+for arg in "$@"; do
+  if [ "$arg" = "-destination" ]; then
+    exec /usr/bin/xcodebuild -allowProvisioningUpdates -allowProvisioningDeviceRegistration "$@"
+  fi
+done
+exec /usr/bin/xcodebuild "$@"
