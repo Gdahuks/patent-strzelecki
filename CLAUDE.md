@@ -372,9 +372,9 @@ by the same next/previous arrows used inside a lesson.
 **Act text is stripped of markup once and memoized** (a `WeakMap` in `src/content/actSearch.ts`),
 and the search screen does this warm-up right after mounting. All the acts together add up to
 nearly 700 KB, so re-assembling Polish diacritics on every keystroke was visible as keyboard
-lag. This is also why `search.ts` has `excerptAt` alongside `excerptAround`: the latter
-assembles the whole text itself to find a position, while for acts the position is already
-known.
+lag. This is also why `markedExcerptAt` in `search.ts` takes a match position rather than a
+phrase: the caller has already folded the text and found the match, and for acts that folding
+must not happen again.
 
 **A unit smaller than an article stays on the same line as its text** in the act stylesheet
 (`app/act/[slug].tsx`). A line break before a bare "§ 1." thinned an act out until a screen held

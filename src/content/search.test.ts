@@ -5,7 +5,6 @@ import { findHelpersScript } from './findInPage';
 import {
   MIN_QUERY_LENGTH,
   countHighlights,
-  excerptAround,
   findAtWordStart,
   fold,
   markedExcerptAt,
@@ -27,6 +26,12 @@ function question(id: string, text: string, answers: string[], law = ''): Questi
     law,
     lesson: 'uobia',
   };
+}
+
+/** The excerpt the way `searchLessons` builds it: fold, find the phrase, cut around it. */
+function excerptAround(text: string, query: string, radius = 60): string {
+  const needle = normalize(query);
+  return markedExcerptAt(text, findAtWordStart(fold(text), needle), needle.length, radius).text;
 }
 
 function lesson(slug: string, title: string, html: string): Lesson {
@@ -230,10 +235,14 @@ describe('searchQuestions', () => {
     assert.deepEqual(searchQuestions(QUESTIONS, 'br'), []);
   });
 
-  it('takes the excerpt from the question when the phrase occurs there', () => {
-    const hits = searchQuestions(QUESTIONS, 'pozwolenie');
+  it('a phrase found in the legal basis alone gives a hit with no mark on the card', () => {
+    // The card shows the basis as a link under the answer, so the hit explains itself
+    // without a mark in the question or the answer.
+    const hits = searchQuestions(QUESTIONS, 'art. 15');
 
-    assert.ok(hits[0].excerpt.includes('pozwolenie'));
+    assert.equal(hits.length, 1);
+    assert.equal(hits[0].questionMark, null);
+    assert.equal(hits[0].answerMark, null);
   });
 
   it('returns nothing for a phrase that doesn’t occur', () => {
@@ -426,14 +435,7 @@ describe('markedExcerptAt', () => {
 });
 
 describe('the mark on a hit', () => {
-  it('a question hit marks the phrase as it stands in the question, not as typed', () => {
-    const [hit] = searchQuestions(QUESTIONS, 'komendant');
-
-    assert.ok(hit.mark, 'no mark');
-    assert.equal(hit.excerpt.slice(hit.mark[0], hit.mark[1]), 'Komendant');
-  });
-
-  it('a question hit also marks the phrase inside the question text itself', () => {
+  it('a question hit marks the phrase inside the question text', () => {
     const [hit] = searchQuestions(QUESTIONS, 'pozwolenie');
 
     assert.ok(hit.questionMark, 'no mark in the question');

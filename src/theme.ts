@@ -174,9 +174,10 @@ export function lessonCss(theme: Theme, base: number): string {
       cursor: pointer;
       -webkit-tap-highlight-color: transparent;
     }
-    /* Search hits in the text: all of them in yellow, the current one more strongly. */
+    /* Search hits in the text: all of them on the same ground as a hit on a result card,
+       the current one more strongly. */
     mark.psx {
-      background: ${theme.dark ? '#7a6410' : '#fff3a3'};
+      background: ${theme.mark};
       color: ${theme.text};
       border-radius: 3px;
       padding: 0 1px;

@@ -24,12 +24,9 @@ export type Mark = readonly [number, number] | null;
 export interface QuestionHit {
   kind: 'question';
   question: Question;
-  /** The excerpt where the match landed — shown in the list. */
-  excerpt: string;
-  mark: Mark;
   /**
    * Where the phrase sits in the question's own text, which the card shows whole — or null
-   * when the match landed in an answer or in the legal basis, which the card doesn't show.
+   * when the match landed in the correct answer or in the legal basis.
    */
   questionMark: Mark;
   /**
@@ -201,25 +198,16 @@ function matches(text: string, needle: string): boolean {
 }
 
 /**
- * An excerpt around a known match position, trimmed to word boundaries.
+ * An excerpt around a known match position, trimmed to word boundaries, plus where the
+ * phrase landed in it.
  *
- * Kept separate from `excerptAround`, where the position is computed by `fold`-ing the whole
- * text. Whoever already has the folded text and the position — which is the case for acts,
- * where folding 700 KB on every keystroke of the phrase would be the screen's most expensive
- * operation — calls this directly.
- */
-export function excerptAt(text: string, at: number, length: number, radius = 60): string {
-  return markedExcerptAt(text, at, length, radius).text;
-}
-
-/**
- * The same excerpt, plus where the phrase landed in it.
- *
- * The position is recomputed rather than searched for again: the excerpt is cut and gets
- * an ellipsis, so `at` in the source text is not `at` in the excerpt, and searching the
- * excerpt for the phrase would need the folding all over again. The mark is a range in the
- * excerpt exactly because `fold` keeps the character count — the matched phrase is as long in
- * the original as in the folded text, so `length` carries over unchanged.
+ * It takes a position, not a phrase: the caller has already `fold`-ed the text and found the
+ * match, and for acts that folding — 700 KB of it — is the one thing that must not happen
+ * again on every keystroke. The mark is recomputed from that position rather than searched
+ * for: the excerpt is cut and gets an ellipsis, so `at` in the source text is not `at` in
+ * the excerpt. It's a range in the excerpt exactly because `fold` keeps the character count —
+ * the matched phrase is as long in the original as in the folded text, so `length` carries
+ * over unchanged.
  */
 export function markedExcerptAt(
   text: string,
@@ -251,30 +239,14 @@ export function markedExcerptAt(
     if (space >= at + length) end = space;
   }
 
-  // `trim()` on the slice can drop leading whitespace, which would shift the mark; the
-  // start is already pulled to the character after a space, so only the end needs trimming.
+  // `trimEnd()`, not `trim()`: dropping leading whitespace would shift the mark. The slice
+  // never starts with whitespace anyway — either at 0 in a text whose whitespace `stripHtml`
+  // and `actText` have already collapsed and trimmed, or right after a space found above.
   const body = text.slice(start, end).trimEnd();
   const lead = start > 0 ? '…' : '';
   const excerpt = `${lead}${body}${end < text.length ? '…' : ''}`;
   const from = lead.length + (at - start);
   return { text: excerpt, mark: [from, from + length] };
-}
-
-/** A text excerpt around the first match of the phrase. */
-export function excerptAround(text: string, query: string, radius = 60): string {
-  return markedExcerptAround(text, query, radius).text;
-}
-
-export function markedExcerptAround(
-  text: string,
-  query: string,
-  radius = 60,
-): { text: string; mark: Mark } {
-  // The phrase is searched for the same way as matching, i.e. through `normalize`. `fold`
-  // alone doesn't collapse whitespace, so while typing a multi-word phrase, a stray trailing
-  // space used to lose the match and the excerpt fell back to the start of the text.
-  const needle = normalize(query);
-  return markedExcerptAt(text, findAtWordStart(fold(text), needle), needle.length, radius);
 }
 
 /**
@@ -298,18 +270,14 @@ export function searchQuestions(questions: Question[], query: string): QuestionH
     const haystack = questionHaystack(question);
     if (!matches(haystack, needle)) continue;
 
-    // A match in the question's own text is worth more than one in a distractor, so the
-    // excerpt is shown from the question whenever it lands there.
+    // The card shows the question and the correct answer whole, so each gets its own mark
+    // rather than an excerpt; a match in the legal basis is visible in the link under them.
     const inQuestion = findAtWordStart(fold(question.question), needle);
     const correct = question.answers[question.correct] ?? '';
     const inAnswer = findAtWordStart(fold(correct), needle);
-    const source = inQuestion >= 0 ? question.question : haystack;
-    const { text: excerpt, mark } = markedExcerptAround(source, query);
     hits.push({
       kind: 'question',
       question,
-      excerpt,
-      mark,
       questionMark: inQuestion >= 0 ? [inQuestion, inQuestion + needle.length] : null,
       answerMark: inAnswer >= 0 ? [inAnswer, inAnswer + needle.length] : null,
     });
