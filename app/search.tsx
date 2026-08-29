@@ -165,7 +165,7 @@ export default function SearchScreen() {
           phrase.trim().length === 0 ? (
             <View style={styles.hint}>
               <Muted>
-                Szukanie obejmuje treść {content.questions.length} pytań wraz z odpowiedziami
+                Szukanie obejmuje treść {content.questions.length} pytań wraz z poprawną odpowiedzią
                 i podstawą prawną, tekst {content.lessons.length} lekcji oraz{' '}
                 {actLabel(allActs().filter(isReadable).length)}. Wielkość liter
                 i polskie znaki nie mają znaczenia — „bron" znajdzie „broń".
