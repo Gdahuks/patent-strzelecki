@@ -141,8 +141,13 @@ meta_get() {
   ' "$META" "$1"
 }
 
-# Opens the stage: makes sure the directory exists and writes the heading to the log.
+# Opens the stage: makes sure the directory exists, drops this stage's own marker and writes the
+# heading to the log. A stage that starts again owns its marker: one left by an earlier run must
+# not vouch for a run that has not finished. Without this, a stage that dies half way through
+# rewriting its output (a copy interrupted, say) would leave require_stage in the next stage
+# happy with a partial result.
 begin() {
   mkdir -p "$RELEASE_DIR"
+  rm -f "$STAGE_DIR/$STAGE"
   log "── $STAGE ── $(date '+%Y-%m-%d %H:%M')"
 }

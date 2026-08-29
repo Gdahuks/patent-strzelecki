@@ -16,6 +16,19 @@ BUNDLETOOL_URL="https://github.com/google/bundletool/releases/download/$BUNDLETO
 BUNDLETOOL="$TOOLS_DIR/bundletool-all-$BUNDLETOOL_VERSION.jar"
 MIN_FREE_GB=5
 
+# ── Tag format ────────────────────────────────────────────────────────────────
+# First, because RELEASE_DIR is built from TAG and the block below deletes it: `TAG=..` would
+# otherwise offer to remove the whole releases directory. A plain exit rather than `die` — there
+# is no release directory to log into yet, and nothing may touch one before this passes.
+#
+# grep, not a case glob: `v[0-9]*.[0-9]*.[0-9]*` would accept v0.4.0-rc1 and v1.2.3.4, and
+# app.config.js would then fall back to app.json's version without a word — after the build.
+if ! printf '%s\n' "$TAG" | grep -Eq '^v[0-9]+\.[0-9]+\.[0-9]+$'; then
+  printf "\n✗ [%s] tag format: %s does not match vX.Y.Z — app.config.js would fall back to app.json's version\n" \
+    "$STAGE" "$TAG" >&2
+  exit 2
+fi
+
 # ── The release directory ──────────────────────────────────────────────────────
 # Before `begin`, because a directory left by an earlier run is the one question that has to be
 # asked before anything is written into it.
@@ -85,10 +98,9 @@ fi
 
 # ── Tag ───────────────────────────────────────────────────────────────────────
 tag_commit=''
-# grep, not a case glob: `v[0-9]*.[0-9]*.[0-9]*` would accept v0.4.0-rc1 and v1.2.3.4, and
-# app.config.js would then fall back to app.json's version without a word — after the build.
-if printf '%s\n' "$TAG" | grep -Eq '^v[0-9]+\.[0-9]+\.[0-9]+$'; then item ok "tag format" "$TAG"
-else item bad "tag format" "$TAG does not match vX.Y.Z — app.config.js would fall back to app.json's version"; fi
+# Already enforced at the top of the file, before anything destructive; the line is repeated here
+# so the printed checklist reads in one order from top to bottom.
+item ok "tag format" "$TAG"
 if git -C "$REPO" rev-parse -q --verify "refs/tags/$TAG" > /dev/null; then
   tag_commit=$(git -C "$REPO" rev-parse "$TAG^{commit}")
   item ok "tag exists" "$tag_commit"

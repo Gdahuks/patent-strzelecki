@@ -80,9 +80,25 @@ describe('lib.sh', () => {
     const done = bash('begin; stage_done', dir);
     assert.equal(done.status, 0);
     assert.ok(existsSync(join(dir, '.stage', 'probe')));
-    const present = bash('begin; require_stage probe; echo fine', dir);
+    // A marker left by *another* stage — the only kind require_stage is ever asked about, since
+    // begin clears the running stage's own.
+    const present = bash('begin; mkdir -p "$STAGE_DIR"; : > "$STAGE_DIR/build"; require_stage build; echo fine', dir);
     assert.equal(present.status, 0);
     assert.match(present.stdout, /fine/);
+  });
+
+  it('begin clears its own stage marker, so an unfinished rerun does not vouch for itself', () => {
+    const dir = freshDir();
+    const done = bash('begin; stage_done', dir);
+    assert.equal(done.status, 0);
+    assert.ok(existsSync(join(dir, '.stage', 'probe')));
+    // A stage that starts again but does not finish must leave nothing behind for require_stage.
+    const restarted = bash('begin', dir);
+    assert.equal(restarted.status, 0);
+    assert.ok(!existsSync(join(dir, '.stage', 'probe')));
+    const after = bash('begin; require_stage probe', dir);
+    assert.equal(after.status, 2);
+    assert.match(after.stderr, /make release-probe TAG=v9\.9\.9/);
   });
 
   it('ok and fail write ✓/✗ lines to checks.md; fail also dies', () => {
