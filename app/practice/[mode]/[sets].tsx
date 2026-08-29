@@ -635,10 +635,17 @@ export default function ExerciseScreen() {
             the answer away. For "Handlowanie amunicją bez zezwolenia to…", seeing "KK" rules
             out a misdemeanour, i.e. solves the question without any actual knowledge. In the
             preview of earlier questions it's there right away, since the answer has already
-            happened there. */}
+            happened there.
+
+            Tapping it cancels the advance scheduled after a correct answer in the ABC quiz.
+            Without that the link appeared and vanished within 550 ms, so after a right
+            answer the provision was unreachable — and had the tap landed, the timer would
+            have moved the quiz on behind the act, bringing the reader back to a different
+            question. Cancelling also puts "Dalej" (next) on screen for the way back. In
+            flashcards and in the preview there's no timer, and the cancel does nothing. */}
         {question.law && (reviewing || (mode === 'flashcards' ? revealed : picked !== null)) ? (
           <View style={styles.law}>
-            <LawLink law={question.law} />
+            <LawLink law={question.law} onOpen={cancelPendingAdvance} />
           </View>
         ) : null}
       </ScrollView>
@@ -714,7 +721,13 @@ export default function ExerciseScreen() {
           a second path to the exact same place, and a progress bar with numbers is a
           natural spot to want to tap, to see what's behind them. */}
       <Pressable
-        onPress={() => router.push(`/questions/${mode}/${params.sets}`)}
+        // The same cancel as on the legal-basis link: this footer is the other way out of
+        // the screen within the 550 ms after a correct answer, and without it the timer
+        // moved the quiz on behind the question list.
+        onPress={() => {
+          cancelPendingAdvance();
+          router.push(`/questions/${mode}/${params.sets}`);
+        }}
         accessibilityRole="button"
         // Without a label, a screen reader would read the three lines of numbers and
         // coloured captions as one long string, ending on "Przejrzyj pytania" (review

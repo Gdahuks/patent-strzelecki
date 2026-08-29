@@ -57,7 +57,13 @@ export function lawAccessibilityAction(
   return { name: 'law', label: `Otwórz podstawę prawną: ${law}` };
 }
 
-export function LawLink({ law }: { law: string }) {
+/**
+ * @param onOpen runs on tap, before the target is resolved and opened — the quiz uses it to
+ *   cancel the advance scheduled after a correct answer, so the link can actually be tapped
+ *   in that window and the same question is still there on the way back. It runs even if
+ *   the target then turns out to have nowhere to go.
+ */
+export function LawLink({ law, onOpen }: { law: string; onOpen?: () => void }) {
   const theme = useTheme();
   const router = useRouter();
 
@@ -69,7 +75,10 @@ export function LawLink({ law }: { law: string }) {
     return <Text style={[styles.plain, { color: theme.muted }]}>{law}</Text>;
   }
 
-  const open = () => openLaw(law, router, theme);
+  const open = () => {
+    onOpen?.();
+    openLaw(law, router, theme);
+  };
 
   // The target's name instead of the word „źródło" — but only when the basis text doesn't
   // already carry it. `sourceName` decides that; what's left here is just assembling the
