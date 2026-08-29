@@ -12,6 +12,7 @@
  */
 
 import { FOLD, WORD_CHAR, normalize } from './search';
+import { JUMP_DEADLINE_MS, JUMP_TICK_MS } from './jumpScript';
 
 /** Below this phrase length, highlighting buries the text and adds nothing. */
 export const MIN_FIND_LENGTH = 3;
@@ -120,6 +121,29 @@ export function findHelpersScript(): string {
     }
     marks = [];
     current = -1;
+    settling += 1;
+  }
+
+  // Same trouble as the unit jump (see jumpScript): on a cold start the page reports
+  // "loaded" before its layout is final, and one scrollIntoView on the first hit lands
+  // short. After scrolling, watch the document height for a while and scroll again when it
+  // changes; two quiet ticks in a row end the watch. Only the newest highlight is watched
+  // (the token), and clearing the marks retires the watch too.
+  //
+  // The reader's first touch ends watching for good, not just for the current run. The
+  // only case that needs it is the first hit after opening an act from a search result,
+  // before any touch; from then on every scrollIntoView is the reader's own arrow tap.
+  var settling = 0;
+  var touched = false;
+  window.addEventListener('touchstart', function () { touched = true; }, { once: true, passive: true });
+  function settle(mark, height, quiet, deadline, token) {
+    if (touched || token !== settling) return;
+    var now = document.body.scrollHeight;
+    if (now !== height) mark.scrollIntoView({ block: 'center' });
+    quiet = now === height ? quiet + 1 : 0;
+    if (quiet < 2 && Date.now() < deadline) {
+      setTimeout(function () { settle(mark, now, quiet, deadline, token); }, ${JUMP_TICK_MS});
+    }
   }
 
   function highlight() {
@@ -128,7 +152,10 @@ export function findHelpersScript(): string {
       else marks[i].className = 'psx';
     }
     if (current >= 0 && marks[current]) {
-      marks[current].scrollIntoView({ block: 'center' });
+      var mark = marks[current];
+      mark.scrollIntoView({ block: 'center' });
+      settling += 1;
+      settle(mark, document.body.scrollHeight, 0, Date.now() + ${JUMP_DEADLINE_MS}, settling);
     }
   }
 

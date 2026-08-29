@@ -27,40 +27,11 @@ import { openInAppBrowser } from '../../src/content/openSource';
 import { findHelpersScript } from '../../src/content/findInPage';
 import { applyVersions, dateLabel, unitLabel } from '../../src/content/versions';
 import { SCROLL_PROPS } from '../../src/content/webviewProps';
+import { jumpScript } from '../../src/content/jumpScript';
 import { parseReadingSample, readerPosition, readingScript } from '../../src/content/readingScript';
 import { loadActPosition, saveActPosition } from '../../src/db/reading';
 import { lessonCss, useTheme } from '../../src/theme';
 import { useSettings } from '../../src/settings/SettingsContext';
-
-/**
- * Script that scrolls to the unit a question's legal basis points to.
- *
- * `ref` comes from a route parameter, and the route is also reachable through a deep link
- * (`patentstrzelecki://act/uobia?ref=…`) — i.e. a value from outside the app. It therefore
- * goes through `JSON.stringify`: inserted raw, it could close the string early and let
- * arbitrary code be appended to the script executed inside the WebView.
- *
- * We compare the attribute in a loop instead of building a `[data-id=…]` selector.
- * `JSON.stringify` produces a **JS string literal**, so its quotes bound the string and never
- * make it into the selector — the result was `[data-id=arti_4]`, a value with no quotes at
- * all. For every unit in the bundle that happens to be a valid CSS identifier this works,
- * but a `ref` starting with a digit, or containing a space, a dot or a `]`, made
- * `querySelector` throw `SyntaxError`, which aborted the whole injected function.
- * The loop has no syntax left to break.
- */
-function jumpTo(ref: string): string {
-  return `(function () {
-  var want = ${JSON.stringify(ref)};
-  var units = document.querySelectorAll('[data-id]');
-  for (var i = 0; i < units.length; i += 1) {
-    if (units[i].getAttribute('data-id') === want) {
-      units[i].scrollIntoView({ block: 'start' });
-      break;
-    }
-  }
-  true;
-})();`;
-}
 
 export default function ActScreen() {
   const { slug, ref, q } = useLocalSearchParams<{ slug: string; ref?: string; q?: string }>();
@@ -213,7 +184,8 @@ export default function ActScreen() {
       // An act keeps a bookmark, not progress, so the position is all it takes from a sample
       // — and only from samples the reader caused. The ones the page sends on load carry the
       // starting position, which is zero whenever the act was opened from a legal basis or
-      // from search; saving those wiped the bookmark on every such visit.
+      // from search; saving those wiped the bookmark on every such visit. A jump's own
+      // scroll does count as movement, so an act opened at a unit remembers that unit.
       const reading = parseReadingSample(event.nativeEvent.data);
       const position = reading === null ? null : readerPosition(reading);
       if (position !== null) void saveActPosition(slug, position);
@@ -229,7 +201,7 @@ export default function ActScreen() {
       rerunFind();
       return;
     }
-    if (ref) webview.current?.injectJavaScript(jumpTo(ref));
+    if (ref) webview.current?.injectJavaScript(jumpScript(ref));
   }, [findQuery, rerunFind, ref]);
 
   if (!act) {
@@ -375,7 +347,7 @@ export default function ActScreen() {
             return (
               <Pressable
                 onPress={() => {
-                  webview.current?.injectJavaScript(jumpTo(item.ref));
+                  webview.current?.injectJavaScript(jumpScript(item.ref));
                   setShowIndex(false);
                 }}
                 accessibilityRole="link"
