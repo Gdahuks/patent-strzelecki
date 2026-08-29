@@ -19,6 +19,12 @@ set -euo pipefail
 : "${RELEASE_DIR:?RELEASE_DIR must be set}"
 : "${STAGE:?STAGE must be set by the calling script}"
 
+# The stages in the order they run. `begin` walks it to invalidate everything downstream of the
+# stage that is starting again. `uploaded` is deliberately absent: it records a human fact (this
+# file went to Play), not a computation, and preflight already warns when a release directory
+# carries it.
+STAGES="preflight content build verify e2e summary"
+
 LOG="$RELEASE_DIR/release.log"
 CHECKS="$RELEASE_DIR/checks.md"
 META="$RELEASE_DIR/release.json"
@@ -96,7 +102,9 @@ ask() {
   local question=$1 answer
   [ -t 0 ] || die "cannot ask \"$question\" — no terminal, and this pipeline never assumes consent"
   printf '%s [t/N] ' "$question"
-  read -r answer
+  # Ctrl-D closes the input without an answer; without this the script would end here in
+  # silence and the caller would read a non-zero return as "no".
+  read -r answer || die "no answer (end of input) to: $question"
   note "asked: $question → ${answer:-<enter>}"
   case "$answer" in
     t | T | tak | TAK | Tak) return 0 ;;
@@ -141,13 +149,22 @@ meta_get() {
   ' "$META" "$1"
 }
 
-# Opens the stage: makes sure the directory exists, drops this stage's own marker and writes the
-# heading to the log. A stage that starts again owns its marker: one left by an earlier run must
-# not vouch for a run that has not finished. Without this, a stage that dies half way through
-# rewriting its output (a copy interrupted, say) would leave require_stage in the next stage
-# happy with a partial result.
+# Opens the stage: makes sure the directory exists, drops this stage's own marker and the markers
+# of every later stage, and writes the heading to the log. A stage that starts again owns its
+# marker: one left by an earlier run must not vouch for a run that has not finished. It also
+# invalidates everything built on its previous result — after a second `make release-build` the
+# AAB is a new file, so the verify and the summary that judged the old one must not stand.
+# Without this, a stage that dies half way through rewriting its output would leave require_stage
+# in the next stage happy with a partial result.
 begin() {
   mkdir -p "$RELEASE_DIR"
+  local seen=0 name
+  for name in $STAGES; do
+    if [ "$name" = "$STAGE" ]; then seen=1; fi
+    if [ "$seen" = 1 ]; then rm -f "$STAGE_DIR/$name"; fi
+  done
+  # And for a stage outside the list (a test harness, or one added later): its own marker goes
+  # regardless, because the rule above all is that a running stage does not vouch for itself.
   rm -f "$STAGE_DIR/$STAGE"
   log "── $STAGE ── $(date '+%Y-%m-%d %H:%M')"
 }

@@ -9,7 +9,7 @@
 
 import { execFileSync, spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { appendFileSync, existsSync, readdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
+import { appendFileSync, existsSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { createInterface } from 'node:readline/promises';
 import { evaluate, parseManifestDump, render, type Check, type Expected, type Facts, type PreviousRelease } from './checks.ts';
@@ -35,6 +35,13 @@ const META = join(RELEASE_DIR, 'release.json');
 const AAB = join(RELEASE_DIR, 'app-release.aab');
 
 const stamp = () => new Date().toTimeString().slice(0, 8);
+/** `YYYY-MM-DD HH:MM` in local time — this heading sits among the bash stages, which log local
+ *  time; a UTC one made verify look as if it had run two hours before the build. */
+function localStamp(): string {
+  const now = new Date();
+  const pad = (value: number) => String(value).padStart(2, '0');
+  return `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())} ${pad(now.getHours())}:${pad(now.getMinutes())}`;
+}
 function note(line: string): void {
   appendFileSync(LOG, `[${stamp()}] [${STAGE}] ${line}\n`);
 }
@@ -103,8 +110,13 @@ async function main(): Promise<void> {
   if (!existsSync(join(RELEASE_DIR, '.stage', 'build'))) {
     die(`stage "build" has not run for ${TAG} — run: make release-build TAG=${TAG}`, 2);
   }
+  // A stage that starts again invalidates everything built on its previous result (lib.sh's
+  // `begin` does the same for the bash stages): a summary must never vouch for a verify that has
+  // not finished, and the old verify marker must not survive a failed rerun.
+  rmSync(join(RELEASE_DIR, '.stage', 'verify'), { force: true });
+  rmSync(join(RELEASE_DIR, '.stage', 'summary'), { force: true });
   if (!existsSync(AAB)) die(`no package at ${AAB}`);
-  log(`── ${STAGE} ── ${new Date().toISOString().slice(0, 16).replace('T', ' ')}`);
+  log(`── ${STAGE} ── ${localStamp()}`);
 
   const meta = readMeta();
   const bundletool = join(RELEASES_DIR, 'tools', `bundletool-all-${metaGet(meta, 'bundletoolVersion')}.jar`);
@@ -144,6 +156,7 @@ async function main(): Promise<void> {
     die(`no base/assets/index.android.bundle in the package: ${(error as Error).message}`);
   }
   if (bundle.length === 0) die('base/assets/index.android.bundle is empty');
+  // SHA-256 of the JS bundle, not of the AAB — that one is in SHA256SUMS.
   const bundleSha256 = createHash('sha256').update(bundle).digest('hex');
 
   const jarsigner = tool('jarsigner', ['-verify', '-verbose', '-certs', AAB]);

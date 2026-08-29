@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Release stage 1: everything that can be checked before spending half an hour on Gradle.
+# Release stage 1: everything that can be checked before the build stage is started.
 #
 # Every item is checked and printed — not just the first failure — so one run shows the whole
 # list of what to fix. The stage also opens the release directory: checks.md gets its heading,
@@ -148,7 +148,10 @@ done
 pipeline_commit=$(git -C "$REPO" rev-parse --short HEAD)
 # The `+` marks a pipeline run from an uncommitted checkout, the same way app.config.js marks
 # the app. Note: the *app* is built from a clean worktree regardless; this is about the scripts.
-[ -z "$(git -C "$REPO" status --porcelain)" ] || pipeline_commit="$pipeline_commit+"
+# The assignment stands on its own: a `git status` that fails would otherwise read as a clean
+# tree and the run would be recorded as coming from a committed checkout.
+repo_dirty=$(git -C "$REPO" status --porcelain)
+[ -z "$repo_dirty" ] || pipeline_commit="$pipeline_commit+"
 
 # Bare assignments on purpose: under set -e a failing `$(…)` here stops the script, while the
 # same substitution inside another command's arguments would not.

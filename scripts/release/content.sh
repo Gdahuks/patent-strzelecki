@@ -1,10 +1,11 @@
 #!/usr/bin/env bash
 # Release stage 2 — the minimal version: validate the bundle's manifest, copy the bundle into the
-# release directory, record how old the content is. Refreshing the bundle, the diff against the
-# previous release and the interactive gate come in stage 2 of the plan.
+# release directory, record how old the content is, and stop for an answer when the content is
+# old. Refreshing the bundle and the diff against the previous release — with the gate that asks
+# about a suspicious diff — come in stage 2 of the plan; the age gate below is already here.
 #
 # From here on every stage reads the content from the release directory, not from the working
-# tree: the tree may change during the half hour Gradle takes, the copy does not.
+# tree: the tree may change while the build runs, the copy does not.
 
 STAGE=content
 source "$(dirname "$0")/lib.sh"

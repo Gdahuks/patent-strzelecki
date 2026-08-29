@@ -101,6 +101,26 @@ describe('lib.sh', () => {
     assert.match(after.stderr, /make release-probe TAG=v9\.9\.9/);
   });
 
+  it('begin invalidates the markers of every later stage, and never the uploaded one', () => {
+    const dir = freshDir();
+    // A rerun of build means a new AAB: the verify and summary that judged the old one must go,
+    // while preflight and content still hold — and "uploaded" is a fact about Play, not a result.
+    const r = bash(
+      'STAGE=build; mkdir -p "$STAGE_DIR";'
+        + ' for s in preflight content build verify summary uploaded; do : > "$STAGE_DIR/$s"; done;'
+        + ' begin',
+      dir,
+    );
+    assert.equal(r.status, 0);
+    const marker = (name: string) => existsSync(join(dir, '.stage', name));
+    assert.ok(!marker('build'), 'build (its own) should be gone');
+    assert.ok(!marker('verify'), 'verify (later) should be gone');
+    assert.ok(!marker('summary'), 'summary (later) should be gone');
+    assert.ok(marker('preflight'), 'preflight (earlier) should stay');
+    assert.ok(marker('content'), 'content (earlier) should stay');
+    assert.ok(marker('uploaded'), 'uploaded is a human fact and must survive any rerun');
+  });
+
   it('ok and fail write ✓/✗ lines to checks.md; fail also dies', () => {
     const dir = freshDir();
     const r = bash('begin; ok "package matches"; fail "version differs"', dir);

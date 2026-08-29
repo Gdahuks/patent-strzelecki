@@ -4,8 +4,8 @@
 # A fresh worktree of the tag is what makes the result trustworthy: no android/ left over from
 # last week, no uncommitted change, no JS bundle Gradle considers "up to date" while the content
 # has moved on (that last one shipped 0.2.0 with stale content, and no log said a word). The
-# price is time — the C++ of the new architecture compiles from scratch for four ABIs — and it is
-# paid on purpose.
+# price is npm ci and a Gradle build with nothing cached — a few minutes, because React Native
+# ships its native artefacts prebuilt and no C++ is compiled here — and it is paid on purpose.
 #
 # On failure the worktree stays, and the last lines say where; on success it is removed.
 
@@ -29,9 +29,12 @@ started=$(date +%s)
 WORK="${TMPDIR:-/tmp}/patent-release-$TAG"
 [ ! -e "$WORK" ] || die "worktree path already exists: $WORK — remove it: git -C $REPO worktree remove --force $WORK"
 
+# Set once the worktree is ours: the trap must not offer to remove a directory this run did not
+# create (a leftover from an earlier run is the one case where the path already existed).
+created=0
 keep_worktree_on_failure() {
   local status=$?
-  if [ "$status" -ne 0 ] && [ -d "$WORK" ]; then
+  if [ "$status" -ne 0 ] && [ "$created" = 1 ] && [ -d "$WORK" ]; then
     printf '\nThe worktree is kept for inspection: %s\nRemove it with: git -C %s worktree remove --force %s\n' \
       "$WORK" "$REPO" "$WORK" >&2
   fi
@@ -39,10 +42,18 @@ keep_worktree_on_failure() {
 trap keep_worktree_on_failure EXIT
 
 # ── Worktree ──────────────────────────────────────────────────────────────────
+# An interrupted run can leave a registration behind for a directory that is already gone; git
+# then refuses to add the same path again. Pruning first costs nothing and removes nothing real.
+run git -C "$REPO" worktree prune
 run git -C "$REPO" worktree add --detach "$WORK" "$TAG"
+created=1
 head=$(git -C "$WORK" rev-parse HEAD)
-[ "$head" = "$(meta_get tagCommit)" ] || die "worktree is at $head, the tag points at $(meta_get tagCommit)"
-[ -z "$(git -C "$WORK" status --porcelain)" ] || die "worktree is not clean right after checkout — see git -C $WORK status"
+# Bare assignments: under set -e a failing `$(…)` here stops the script, while the same
+# substitution inside another command's arguments would compare against '' and pass.
+tag_commit=$(meta_get tagCommit)
+checkout_dirty=$(git -C "$WORK" status --porcelain)
+[ "$head" = "$tag_commit" ] || die "worktree is at $head, the tag points at $tag_commit"
+[ -z "$checkout_dirty" ] || die "worktree is not clean right after checkout — see git -C $WORK status"
 log "worktree at $WORK ($head), clean"
 
 # ── Content ───────────────────────────────────────────────────────────────────
@@ -77,7 +88,7 @@ gradle_version=$(sed -n 's|.*gradle-\([0-9.]*\)-.*|\1|p' "$WORK/android/gradle/w
 [ -n "$gradle_version" ] || die "could not read the Gradle version from gradle-wrapper.properties"
 meta_set gradleVersion "$gradle_version"
 
-log "gradle bundleRelease (Gradle $gradle_version, R8 on — this is the long part)…"
+log "gradle bundleRelease (Gradle $gradle_version, R8 on — the longest stage)…"
 # The password lives in a shell variable and reaches Gradle only through the environment of the
 # subshell. `run` logs the function name, not the variables, so nothing secret lands in
 # release.log. Read into a variable first: a failing `$(…)` inside an environment prefix would

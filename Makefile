@@ -313,9 +313,8 @@ icons-write: ## Generate and overwrite the full set of icons
 
 # `make release TAG=vX.Y.Z` builds the store package from a tag in a fresh worktree, checks the
 # file it produced and leaves everything (AAB, checks.md, release.log) under RELEASES_DIR/TAG.
-# Design and reasoning: docs/superpowers/specs/2026-08-29-lokalny-pipeline-wydania-design.md
-# in the content-tool repository. Each stage is also a target of its own, so a failed or
-# repeated check does not cost the half hour of Gradle again.
+# The design notes for this pipeline are kept outside this repository. Each stage is also a
+# target of its own, so a failed or repeated check does not cost the whole build again.
 #
 # Exit codes: make turns any failing recipe into its own exit code 2 and appends its own
 # "*** [release-summary] Error 3" line, so the scripts' codes (1 check failed, 2 environment,
@@ -324,6 +323,10 @@ icons-write: ## Generate and overwrite the full set of icons
 RELEASE_ENV = REPO='$(CURDIR)' TAG='$(TAG)' RELEASES_DIR='$(RELEASES_DIR)' \
   RELEASE_DIR='$(RELEASES_DIR)/$(TAG)' CONTENT_DIR='$(CONTENT_DIR)' SKIP_E2E='$(SKIP_E2E)' \
   UPLOAD_KEYSTORE='$(UPLOAD_KEYSTORE)' UPLOAD_KEYCHAIN_ITEM='$(UPLOAD_KEYCHAIN_ITEM)'
+
+# The stage goals depend only on release-tag, so `make -j release` would start them at once;
+# they share files in the release directory and each one reads what the previous one wrote.
+.NOTPARALLEL:
 
 release-tag:
 	@test -n '$(TAG)' || { printf 'Which tag? make release TAG=vX.Y.Z\n'; exit 2; }

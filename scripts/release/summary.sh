@@ -14,18 +14,23 @@ require_stage build
 require_stage verify
 begin
 
+# Bare assignments, here and below: a missing key stops the script on the assignment (set -e),
+# while `$(meta_get …)` inside another command's arguments would be swallowed and compared as an
+# empty string — a check that cannot fail.
+skip_e2e=$(meta_get skipE2e)
+
 unverified=0
-if [ "$(meta_get skipE2e)" = 1 ]; then
+if [ "$skip_e2e" = 1 ]; then
   unverified=1
   checks "## E2E"
   checks "**NIEZWERYFIKOWANE: e2e pominięte flagą SKIP_E2E=1 — nikt nie widział tej paczki uruchomionej.**"
   checks ""
 else
-  require_stage e2e
+  # There is no e2e stage yet — it is stage 3 of the plan. Reachable only after a standalone
+  # `make release-preflight` without the flag; `make release` refuses to start without it.
+  die "the e2e stage does not exist yet (stage 3 of the plan) — rerun: make release-preflight TAG=$TAG SKIP_E2E=1"
 fi
 
-# Bare assignments first: a missing key stops the script here (set -e), while `$(meta_get …)`
-# inside another command's arguments would be swallowed.
 size_bytes=$(meta_get sizeBytes)
 version_code=$(meta_get manifestVersionCode)
 version=$(meta_get version)
