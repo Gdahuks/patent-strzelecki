@@ -25,6 +25,13 @@ export interface Theme {
    * stays untouched, the contrast rises to 6.1–8.1:1, and the light theme keeps its white.
    */
   onFill: string;
+  /**
+   * The ground behind a search match, set like a highlighter stroke — what marks the phrase
+   * in a result card. Bold alone wasn't enough: a question's text is already bold, so a bold
+   * match inside it was invisible. The text on it uses `text`, not `muted`: `muted` on
+   * this ground would fall under 4.5:1 in the dark theme.
+   */
+  mark: string;
 }
 
 const LIGHT: Theme = {
@@ -39,6 +46,7 @@ const LIGHT: Theme = {
   bad: '#c0362c',
   critical: '#a8560b',
   onFill: '#ffffff',
+  mark: '#ffe58a',
 };
 
 const DARK: Theme = {
@@ -55,6 +63,9 @@ const DARK: Theme = {
   // The app's background colour used as the label on a fill — the same shade the eye
   // already knows from the rest of the screen.
   onFill: '#101317',
+  // Dim, not bright: a saturated yellow behind light text reads as a warning here, and the
+  // text on it (#e8eaed) still clears 7:1.
+  mark: '#4d4310',
 };
 
 export function useTheme(): Theme {

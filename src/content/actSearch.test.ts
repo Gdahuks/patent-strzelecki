@@ -99,6 +99,13 @@ describe('searchActs', () => {
     assert.match(hit.excerpt, /Pozwolenie na broń wydaje komendant/);
     assert.doesNotMatch(hit.excerpt, /unit_|class=|data-id|</);
   });
+
+  it('marks where the phrase sits in the excerpt', () => {
+    const [hit] = searchActs([STATUTE], 'Komendant');
+
+    assert.ok(hit.mark, 'no mark');
+    assert.equal(hit.excerpt.slice(hit.mark[0], hit.mark[1]), 'komendant');
+  });
 });
 
 describe("provisions' wordings", () => {
