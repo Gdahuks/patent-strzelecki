@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'vitest';
 
+import { JUMP_DEADLINE_MS } from './jumpScript';
 import {
   MIN_FIND_LENGTH,
   findCommands,
@@ -170,5 +171,20 @@ describe('findHelpersScript', () => {
 
   it('does not highlight when the phrase is too short', () => {
     assert.ok(script.includes(`needle.length < ${MIN_FIND_LENGTH}`));
+  });
+});
+
+describe('findHelpersScript — settling on the current hit', () => {
+  it('keeps the current hit in view while the page is still laying out', () => {
+    // Same failure as the unit jump: on a cold start "loaded" comes before the layout is
+    // final, and one scrollIntoView on the first hit lands short. The script re-checks the
+    // document height and scrolls again while it is still growing, with a deadline.
+    const script = findHelpersScript();
+
+    assert.match(script, /scrollHeight/);
+    assert.match(script, /function settle\(/);
+    assert.match(script, new RegExp(`Date\\.now\\(\\) \\+ ${JUMP_DEADLINE_MS}`));
+    assert.match(script, /quiet < 2/);
+    assert.match(script, /touchstart/);
   });
 });
