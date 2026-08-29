@@ -35,17 +35,26 @@ KEY_DNAME ?= CN=$(USER), OU=patent-strzelecki, O=patent-strzelecki, C=PL
 AAB              := android/app/build/outputs/bundle/release/app-release.aab
 CONTENT_MANIFEST := assets/content/manifest.json
 
+# Where finished releases land — outside the repository, because every directory there holds
+# the store package plus a copy of the content bundle. Overridable from the shell profile.
+RELEASES_DIR ?= $(or $(PATENT_RELEASES_DIR),$(HOME)/Releases/patent-strzelecki)
+# Where the pipeline takes the content bundle from. The default is the working tree; a separate
+# tool (not part of this repository) writes it there.
+CONTENT_DIR  ?= $(or $(PATENT_CONTENT_DIR),$(CURDIR)/assets/content)
+
 .DEFAULT_GOAL := help
 .PHONY: help setup \
         typecheck lint check start start-clean bundle ios ios-sim prebuild \
         android android-aab aab-content drop-stale-bundle \
         android-key android-avd android-emu prebuild-android version \
-        icons icons-write doctor clean clean-native
+        icons icons-write doctor clean clean-native \
+        release release-tag release-preflight release-content release-build \
+        release-verify release-summary release-uploaded
 
 help: ## This list
 	@printf '\nPatent Strzelecki\n\n'
 	@grep -hE '^[a-z][a-z-]*:.*?## ' $(MAKEFILE_LIST) \
-	  | awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-16s\033[0m %s\n", $$1, $$2}'
+	  | awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-18s\033[0m %s\n", $$1, $$2}'
 	@printf '\nDevice for make ios: "%s"  (override: make ios DEVICE="...")\n\n' '$(DEVICE)'
 
 # ── Setup ────────────────────────────────────────────────────────────────────
@@ -299,6 +308,50 @@ icons: ## Preview the icons without overwriting any files
 
 icons-write: ## Generate and overwrite the full set of icons
 	cd assets && uv run --with pillow python generate-icons.py --write
+
+# ── Release pipeline ─────────────────────────────────────────────────────────
+
+# `make release TAG=vX.Y.Z` builds the store package from a tag in a fresh worktree, checks the
+# file it produced and leaves everything (AAB, checks.md, release.log) under RELEASES_DIR/TAG.
+# Design and reasoning: docs/superpowers/specs/2026-08-29-lokalny-pipeline-wydania-design.md
+# in the content-tool repository. Each stage is also a target of its own, so a failed or
+# repeated check does not cost the half hour of Gradle again.
+#
+# Exit codes: make turns any failing recipe into its own exit code 2 and appends its own
+# "*** [release-summary] Error 3" line, so the scripts' codes (1 check failed, 2 environment,
+# 3 built but not verified end-to-end) are visible only when a script is run directly. From
+# make, read the line just above make's message, and checks.md.
+RELEASE_ENV = REPO='$(CURDIR)' TAG='$(TAG)' RELEASES_DIR='$(RELEASES_DIR)' \
+  RELEASE_DIR='$(RELEASES_DIR)/$(TAG)' CONTENT_DIR='$(CONTENT_DIR)' SKIP_E2E='$(SKIP_E2E)' \
+  UPLOAD_KEYSTORE='$(UPLOAD_KEYSTORE)' UPLOAD_KEYCHAIN_ITEM='$(UPLOAD_KEYCHAIN_ITEM)'
+
+release-tag:
+	@test -n '$(TAG)' || { printf 'Which tag? make release TAG=vX.Y.Z\n'; exit 2; }
+
+release: release-tag ## Store package from a tag: preflight, content, build, verify, summary
+	@test '$(SKIP_E2E)' = '1' || { \
+	  printf 'The e2e stage does not exist yet — run with SKIP_E2E=1.\n'; \
+	  printf 'The result is then marked as not verified end-to-end (see checks.md).\n'; exit 2; }
+	@$(MAKE) --no-print-directory release-preflight release-content release-build \
+	  release-verify release-summary TAG='$(TAG)' SKIP_E2E='$(SKIP_E2E)'
+
+release-preflight: release-tag ## Release stage 1: tools, upload key, tag, bundletool, disk
+	@$(RELEASE_ENV) bash scripts/release/preflight.sh
+
+release-content: release-tag ## Release stage 2: copy the content bundle into the release directory
+	@$(RELEASE_ENV) bash scripts/release/content.sh
+
+release-build: release-tag ## Release stage 3: fresh worktree, tests with content, prebuild, bundleRelease
+	@$(RELEASE_ENV) bash scripts/release/build.sh
+
+release-verify: release-tag ## Release stage 4: checks inside the AAB, written to checks.md
+	@$(RELEASE_ENV) node scripts/release/verify.ts
+
+release-summary: release-tag ## Release stage 5: close checks.md and say what to upload where
+	@$(RELEASE_ENV) bash scripts/release/summary.sh
+
+release-uploaded: release-tag ## After uploading to Play: mark this release as the one testers have
+	@$(RELEASE_ENV) bash scripts/release/uploaded.sh
 
 # ── Diagnostics ──────────────────────────────────────────────────────────────
 
