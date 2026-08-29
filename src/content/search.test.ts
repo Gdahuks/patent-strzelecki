@@ -8,6 +8,7 @@ import {
   excerptAround,
   findAtWordStart,
   fold,
+  markedExcerptAt,
   normalize,
   search,
   searchLessons,
@@ -399,3 +400,67 @@ describe('search', () => {
     assert.ok(MIN_QUERY_LENGTH >= 2);
   });
 });
+
+describe('markedExcerptAt', () => {
+  const text = 'Pierwsze zdanie o niczym. Pozwolenie na broń wydaje Komendant. Trzecie zdanie.';
+
+  it('the mark points at the phrase inside the excerpt, past the leading ellipsis', () => {
+    const at = text.indexOf('Komendant');
+    const { text: excerpt, mark } = markedExcerptAt(text, at, 'Komendant'.length, 15);
+
+    assert.ok(excerpt.startsWith('…'), excerpt);
+    assert.ok(mark, 'no mark');
+    assert.equal(excerpt.slice(mark[0], mark[1]), 'Komendant');
+  });
+
+  it('a match at the very start is marked from zero', () => {
+    const { text: excerpt, mark } = markedExcerptAt(text, 0, 'Pierwsze'.length, 20);
+
+    assert.deepEqual(mark, [0, 'Pierwsze'.length]);
+    assert.equal(excerpt.slice(0, 'Pierwsze'.length), 'Pierwsze');
+  });
+
+  it('no match means no mark', () => {
+    assert.equal(markedExcerptAt(text, -1, 5, 20).mark, null);
+  });
+});
+
+describe('the mark on a hit', () => {
+  it('a question hit marks the phrase as it stands in the question, not as typed', () => {
+    const [hit] = searchQuestions(QUESTIONS, 'komendant');
+
+    assert.ok(hit.mark, 'no mark');
+    assert.equal(hit.excerpt.slice(hit.mark[0], hit.mark[1]), 'Komendant');
+  });
+
+  it('a question hit also marks the phrase inside the question text itself', () => {
+    const [hit] = searchQuestions(QUESTIONS, 'pozwolenie');
+
+    assert.ok(hit.questionMark, 'no mark in the question');
+    assert.equal(
+      hit.question.question.slice(hit.questionMark[0], hit.questionMark[1]),
+      'pozwolenie',
+    );
+  });
+
+  it('a phrase found in an answer leaves the question text unmarked', () => {
+    const [hit] = searchQuestions(QUESTIONS, 'komendant');
+
+    assert.equal(hit.questionMark, null);
+  });
+
+  it('a lesson hit marks the phrase with its diacritics', () => {
+    const hit = searchLessons(LESSONS, 'bron').find((h) => h.lesson.slug === 'uobia');
+
+    assert.ok(hit?.mark, 'no mark');
+    assert.equal(hit.excerpt.slice(hit.mark[0], hit.mark[1]), 'broń');
+  });
+
+  it('a lesson found only by its title has no mark', () => {
+    const hit = searchLessons(LESSONS, 'amunicji').find((h) => h.lesson.slug === 'uobia');
+
+    assert.ok(hit, 'no hit');
+    assert.equal(hit.mark, null);
+  });
+});
+
