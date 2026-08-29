@@ -12,11 +12,14 @@
 # only cure was a trip through Xcode, which does allow provisioning updates. With the flag
 # xcodebuild renews the profile by itself and the phone build stays a one-liner.
 #
+# -allowProvisioningDeviceRegistration goes with it: a new profile is only issued for devices
+# on the team's list, and a phone plugged in for the first time is not on it yet.
+#
 # Only real builds get the flags — informational calls such as `xcodebuild -list` carry no
 # -destination, and there is nothing to provision for them.
 for arg in "$@"; do
   if [ "$arg" = "-destination" ]; then
-    exec /usr/bin/xcodebuild "$@" -allowProvisioningUpdates -allowProvisioningDeviceRegistration
+    exec /usr/bin/xcodebuild -allowProvisioningUpdates -allowProvisioningDeviceRegistration "$@"
   fi
 done
 exec /usr/bin/xcodebuild "$@"
