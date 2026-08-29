@@ -27,7 +27,7 @@ import { openInAppBrowser } from '../../src/content/openSource';
 import { findHelpersScript } from '../../src/content/findInPage';
 import { applyVersions, dateLabel, unitLabel } from '../../src/content/versions';
 import { SCROLL_PROPS } from '../../src/content/webviewProps';
-import { parseReadingSample, readingScript } from '../../src/content/readingScript';
+import { parseReadingSample, readerPosition, readingScript } from '../../src/content/readingScript';
 import { loadActPosition, saveActPosition } from '../../src/db/reading';
 import { lessonCss, useTheme } from '../../src/theme';
 import { useSettings } from '../../src/settings/SettingsContext';
@@ -210,9 +210,13 @@ export default function ActScreen() {
         return;
       }
 
-      // An act keeps a bookmark, not progress, so the position is all it takes from a sample.
+      // An act keeps a bookmark, not progress, so the position is all it takes from a sample
+      // — and only from samples the reader caused. The ones the page sends on load carry the
+      // starting position, which is zero whenever the act was opened from a legal basis or
+      // from search; saving those wiped the bookmark on every such visit.
       const reading = parseReadingSample(event.nativeEvent.data);
-      if (reading !== null) void saveActPosition(slug, reading.position);
+      const position = reading === null ? null : readerPosition(reading);
+      if (position !== null) void saveActPosition(slug, position);
     },
     [slug, acceptFind],
   );

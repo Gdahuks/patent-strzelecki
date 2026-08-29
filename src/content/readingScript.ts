@@ -92,6 +92,18 @@ export interface ReadingSample {
   height: number;
 }
 
+/**
+ * The position a screen may save from a sample — or null for the samples the page sends on
+ * load, which exist to give the tracker a window and say nothing about where the reader is.
+ *
+ * Shared by the lesson and the act screen on purpose. The act screen used to save every
+ * sample, so opening an act from a legal basis or from search (which starts the page at the
+ * top) overwrote the bookmark left in it with zero.
+ */
+export function readerPosition(sample: ReadingSample): number | null {
+  return sample.initial ? null : sample.position;
+}
+
 function fraction(value: unknown): number {
   return typeof value === 'number' && Number.isFinite(value) ? Math.min(1, Math.max(0, value)) : 0;
 }

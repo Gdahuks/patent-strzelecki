@@ -218,6 +218,13 @@ course site, and the app has its own quizzing anyway.
 **Reading position is stored as a fraction, not a pixel offset.** Content height changes with
 font scale, so a pixel offset would point at a different place after a settings change.
 
+**Only the reader's own movement is saved.** The page sends samples on load too (they give the
+tracker a window), and those carry the starting position — zero when an act is opened from a
+legal basis or a search hit. Both the lesson and the act screen take a position from a sample
+through `readerPosition` in `src/content/readingScript.ts`, which drops those samples; a test
+reads both screens as text to keep it that way. The act screen used to save every sample and
+wiped its bookmark on every such visit.
+
 **Reading progress and the reading position are two different numbers.** `position` is the last
 place the reader was and answers only "where do I open this lesson"; `max_position` is the
 furthest **confirmed** place and is what the percentage and the read state are made of. One
