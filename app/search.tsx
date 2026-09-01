@@ -1,9 +1,8 @@
-import { Stack, useRouter, type Href } from 'expo-router';
+import { Stack, useRouter } from 'expo-router';
 import { useEffect, useMemo, useState } from 'react';
 import {
   FlatList,
   InteractionManager,
-  Keyboard,
   Pressable,
   StyleSheet,
   Text,
@@ -62,14 +61,6 @@ export default function SearchScreen() {
   const theme = useTheme();
   const paddingBottom = useBottomInset(32);
   const router = useRouter();
-  // Every way out of this screen goes through here. The phrase is typed, so the keyboard is up
-  // at the moment a result is tapped, and nothing on the target screen takes it down — it would
-  // cover the lower part of the very passage the reader came to see. Leaving it to each call
-  // site is how a fourth one would arrive without it.
-  const open = (path: Href) => {
-    Keyboard.dismiss();
-    router.push(path);
-  };
   const [query, setQuery] = useState('');
   // The phrase results are actually computed against — trailing the input field by `SEARCH_DELAY`.
   const [phrase, setPhrase] = useState('');
@@ -195,7 +186,7 @@ export default function SearchScreen() {
                 // The phrase travels along with the path: the lesson opens with hits
                 // highlighted and scrolls to the first one, instead of to the very top.
                 onPress={() =>
-                  open(
+                  router.push(
                     steppable
                       ? `/learn/${item.lesson.slug}?q=${encodeURIComponent(phrase.trim())}`
                       : `/learn/${item.lesson.slug}`,
@@ -247,7 +238,7 @@ export default function SearchScreen() {
                 // Same as a lesson: the act opens with hits highlighted, scrolled to the
                 // first one, and the remaining ones are reached with the arrows.
                 onPress={() =>
-                  open(
+                  router.push(
                     steppable
                       ? `/act/${item.act.slug}?q=${encodeURIComponent(phrase.trim())}`
                       : `/act/${item.act.slug}`,
@@ -315,7 +306,7 @@ export default function SearchScreen() {
               disabled={inert}
               onPress={() =>
                 lesson &&
-                open(`/learn/${lesson.slug}?q=${encodeURIComponent(phrase.trim())}`)
+                router.push(`/learn/${lesson.slug}?q=${encodeURIComponent(phrase.trim())}`)
               }
               accessibilityRole="button"
               // The legal basis is a separate, tappable element nested inside this row, and
