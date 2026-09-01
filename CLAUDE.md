@@ -467,6 +467,17 @@ does not mirror the course's own logo. Don't try to recover their logo from `fav
 the course website's favicon, not a file in this repository, and at 170×169 px, against the
 icon's required 1024×1024, there's nothing usable to recover from it either way.
 
+**`scripts/release/*.ts` run on plain Node (24, pinned in `.nvmrc`), not through Metro or
+vitest.** Node strips types but does not rewrite import paths, so imports between those files
+carry the `.ts` extension — which is why `tsconfig.json` has `allowImportingTsExtensions`. Keep
+them free of `enum` and parameter properties (Node's type stripping does not support either).
+`scripts/release/package.json` holds only `"type": "module"`: without it Node prints a
+four-line `MODULE_TYPELESS_PACKAGE_JSON` warning on every run. Don't move that key to the
+root `package.json` — Metro would read it.
+`make release` writes outside the repository (`PATENT_RELEASES_DIR`); its stages share state
+through files there, and `make` reports any failing stage as exit 2 regardless of the script's
+own code — read the last line and `checks.md`.
+
 ## Tests
 
 The spaced-repetition engine (`src/engine/leitner.ts`), the exam engine (`src/engine/exam.ts`),

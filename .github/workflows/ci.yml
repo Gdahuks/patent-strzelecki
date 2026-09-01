@@ -10,9 +10,11 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # The same major as the release pipeline pins in .nvmrc — a build checked on one Node and
+      # shipped from another is not the same build.
       - uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version-file: .nvmrc
           cache: npm
 
       # Expo pins react to a version that conflicts with the react-dom pulled in by web-facing
