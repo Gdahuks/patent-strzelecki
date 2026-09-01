@@ -318,6 +318,7 @@ export default function ActScreen() {
           placeholder={`Szukaj w ${act.short}`}
           query={find.query}
           state={find.state}
+          autoFocus={find.focusOnOpen}
           onChange={find.change}
           onStep={find.step}
           onClose={find.close}

@@ -49,6 +49,15 @@ export interface FindInPage {
   accept: (raw: string) => boolean;
   /** Reruns the current phrase once more, after the page loads (the script only exists then). */
   rerun: () => void;
+  /**
+   * Whether the field should take focus when the bar appears.
+   *
+   * True when the reader opened the bar themselves — the field is empty and there is nothing
+   * to do but type. False when the bar opened because a phrase arrived from the search screen:
+   * the phrase is already in it, the hits are already highlighted, and raising the keyboard
+   * would cover the lower part of the passage the reader came to read.
+   */
+  focusOnOpen: boolean;
 }
 
 export function useFindInPage(
@@ -58,6 +67,7 @@ export function useFindInPage(
   // A phrase passed in from search results opens the bar right away — otherwise the
   // highlight would appear for no visible reason, with no way to jump between hits.
   const [open, setOpen] = useState(initialQuery.length > 0);
+  const [focusOnOpen, setFocusOnOpen] = useState(initialQuery.length === 0);
   const [query, setQuery] = useState(initialQuery);
   const [state, setState] = useState<FindState | null>(null);
 
@@ -118,7 +128,11 @@ export function useFindInPage(
   // disappeared, the yellow highlighting stayed, and there was nothing left to remove it.
   const toggle = useCallback(() => {
     if (open) close();
-    else setOpen(true);
+    else {
+      // Opened by hand, on an empty field: focus is the whole point of the tap.
+      setFocusOnOpen(true);
+      setOpen(true);
+    }
   }, [open, close]);
 
   const accept = useCallback((raw: string) => {
@@ -143,13 +157,14 @@ export function useFindInPage(
     run(query);
   }, [run, query]);
 
-  return { open, query, state, change, step, close, toggle, accept, rerun };
+  return { open, query, state, change, step, close, toggle, accept, rerun, focusOnOpen };
 }
 
 export function FindBar({
   placeholder,
   query,
   state,
+  autoFocus,
   onChange,
   onStep,
   onClose,
@@ -157,6 +172,7 @@ export function FindBar({
   placeholder: string;
   query: string;
   state: FindState | null;
+  autoFocus: boolean;
   onChange: (query: string) => void;
   onStep: (delta: number) => void;
   onClose: () => void;
@@ -171,7 +187,7 @@ export function FindBar({
         onChangeText={onChange}
         placeholder={placeholder}
         placeholderTextColor={theme.muted}
-        autoFocus
+        autoFocus={autoFocus}
         autoCorrect={false}
         returnKeyType="search"
         style={[

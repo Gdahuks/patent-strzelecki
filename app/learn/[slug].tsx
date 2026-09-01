@@ -258,6 +258,7 @@ export default function LessonScreen() {
           placeholder="Szukaj w tej lekcji"
           query={find.query}
           state={find.state}
+          autoFocus={find.focusOnOpen}
           onChange={find.change}
           onStep={find.step}
           onClose={find.close}
