@@ -12,7 +12,7 @@ import { createHash } from 'node:crypto';
 import { appendFileSync, existsSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { createInterface } from 'node:readline/promises';
-import { evaluate, parseManifestDump, render, type Check, type Expected, type Facts, type PreviousRelease } from './checks.ts';
+import { evaluate, jarsignerVerified, parseManifestDump, render, type Check, type Expected, type Facts, type PreviousRelease } from './checks.ts';
 
 const STAGE = 'verify';
 
@@ -100,10 +100,12 @@ function previousRelease(tag: string, stage: 'uploaded' | 'verify'): string | nu
 async function askYes(question: string): Promise<boolean> {
   if (!process.stdin.isTTY) die(`cannot ask "${question}" — no terminal, and this pipeline never assumes consent`);
   const rl = createInterface({ input: process.stdin, output: process.stdout });
-  const answer = (await rl.question(`${question} [t/N] `)).trim();
+  const answer = (await rl.question(`${question} [y/N] `)).trim();
   rl.close();
   note(`asked: ${question} → ${answer || '<enter>'}`);
-  return ['t', 'T', 'tak', 'TAK', 'Tak'].includes(answer);
+  // The questions are English, so `y` has to work; `t` stays because that is what the prompt
+  // used to accept and it is still the reflex of whoever runs this.
+  return ['y', 'yes', 't', 'tak'].includes(answer.toLowerCase());
 }
 
 async function main(): Promise<void> {
@@ -122,7 +124,10 @@ async function main(): Promise<void> {
   const bundletool = join(RELEASES_DIR, 'tools', `bundletool-all-${metaGet(meta, 'bundletoolVersion')}.jar`);
   if (!existsSync(bundletool)) die(`no bundletool at ${bundletool} — rerun: make release-preflight TAG=${TAG}`);
 
-  const appJson = JSON.parse(readFileSync(join(REPO, 'app.json'), 'utf8')) as { expo: { android: { package: string } } };
+  // From the tag, not from the working tree — this file's own premise is that the two can
+  // disagree while every log says success. `git show` reads the tagged blob directly, which
+  // also survives the build worktree being removed on success.
+  const appJson = JSON.parse(tool('git', ['-C', REPO, 'show', `${TAG}:app.json`])) as { expo: { android: { package: string } } };
 
   const expected: Expected = {
     package: appJson.expo.android.package,
@@ -206,7 +211,7 @@ async function main(): Promise<void> {
     bundleHasVersion: bundle.includes(expected.contentVersion, 0, 'latin1'),
     bundleHasScrapedAt: bundle.includes(expected.contentScrapedAt, 0, 'latin1'),
     bundleSha256,
-    jarVerified: jarsigner.includes('jar verified.'),
+    jarVerified: jarsignerVerified(jarsigner),
     signerFingerprint,
     unzipTestOk: unzipTest.status === 0,
     previous,
@@ -243,4 +248,9 @@ async function main(): Promise<void> {
   log(`verify complete: ${checks.length} checks, ${failed.length} failed`);
 }
 
-await main();
+// Anything thrown on the way — a malformed release.json, a manifest dump that does not parse —
+// has to leave the same trace as a checked failure: FAILED in the log and the pointer to it on
+// stderr. Without this the stage ends in a bare stack trace and the log just stops.
+await main().catch((error: unknown) => {
+  die(error instanceof Error ? (error.stack ?? error.message) : String(error));
+});

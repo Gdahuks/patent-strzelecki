@@ -37,7 +37,11 @@ export interface Facts {
   bundleHasVersion: boolean;
   bundleHasScrapedAt: boolean;
   bundleSha256: string;
-  /** `jarsigner -verify` printed "jar verified." */
+  /**
+   * `jarsigner -verify` printed "jar verified." AND did not report unsigned entries. The
+   * self-signed-certificate warning does not count against it: an upload key is self-signed by
+   * definition, so every legitimate release carries that warning.
+   */
   jarVerified: boolean;
   /** SHA-256 of the signing certificate as printed by `keytool -printcert -jarfile`. */
   signerFingerprint: string | null;
@@ -116,6 +120,20 @@ export function architecturesOf(entries: string[]): string[] {
     if (match) abis.add(match[1]);
   }
   return [...abis].sort();
+}
+
+/**
+ * Whether `jarsigner -verify` output describes a fully signed archive.
+ *
+ * "jar verified." on its own is not enough — jarsigner prints it even when it also reports
+ * unsigned entries. Demanding a warning-free run would be wrong in the other direction: an
+ * upload key is self-signed by definition under Play App Signing, so every legitimate release
+ * carries "This jar contains entries whose signer certificate is self-signed". The same goes
+ * for the "signed in JarFile but is not signed in JarInputStream" lines, which an AAB produces
+ * by the thousand. Only unsigned entries disqualify the package.
+ */
+export function jarsignerVerified(output: string): boolean {
+  return output.includes('jar verified.') && !output.includes('unsigned entries');
 }
 
 function requireExpected(expected: Expected): void {

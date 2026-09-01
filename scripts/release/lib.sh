@@ -101,13 +101,15 @@ checks() { printf '%s\n' "$*" >> "$CHECKS"; }
 ask() {
   local question=$1 answer
   [ -t 0 ] || die "cannot ask \"$question\" — no terminal, and this pipeline never assumes consent"
-  printf '%s [t/N] ' "$question"
+  printf '%s [y/N] ' "$question"
   # Ctrl-D closes the input without an answer; without this the script would end here in
   # silence and the caller would read a non-zero return as "no".
   read -r answer || die "no answer (end of input) to: $question"
   note "asked: $question → ${answer:-<enter>}"
+  # The questions are English, so `y` has to work; `t` stays because that is what the prompt
+  # used to accept and it is still the reflex of whoever runs this.
   case "$answer" in
-    t | T | tak | TAK | Tak) return 0 ;;
+    y | Y | yes | YES | Yes | t | T | tak | TAK | Tak) return 0 ;;
     *) return 1 ;;
   esac
 }

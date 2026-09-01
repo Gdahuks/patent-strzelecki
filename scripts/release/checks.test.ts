@@ -3,6 +3,7 @@ import { describe, it } from 'vitest';
 import {
   architecturesOf,
   evaluate,
+  jarsignerVerified,
   parseManifestDump,
   render,
   type Expected,
@@ -90,6 +91,33 @@ describe('parseManifestDump', () => {
 describe('architecturesOf', () => {
   it('lists the ABIs under base/lib, sorted', () => {
     assert.deepEqual(architecturesOf(entries()), ['arm64-v8a', 'armeabi-v7a', 'x86', 'x86_64']);
+  });
+});
+
+describe('jarsignerVerified', () => {
+  // The tail of a real run on the 0.4.0 package: an upload key is self-signed, so this warning
+  // is what a correct release looks like. Treating any warning as a failure would reject it.
+  const selfSigned = [
+    '- Entry META-INF/MANIFEST.MF is signed in JarFile but is not signed in JarInputStream',
+    '',
+    'jar verified.',
+    '',
+    'Warning: ',
+    'This jar contains entries whose signer certificate is self-signed.',
+    'The signer certificate will expire on 2053-12-24.',
+  ].join('\n');
+
+  it('accepts a package signed with a self-signed upload key', () => {
+    assert.equal(jarsignerVerified(selfSigned), true);
+  });
+
+  it('rejects a package with unsigned entries even when the jar verifies', () => {
+    const withUnsigned = `${selfSigned}\nThis jar contains unsigned entries which have not been integrity-checked.`;
+    assert.equal(jarsignerVerified(withUnsigned), false);
+  });
+
+  it('rejects output without the verification line', () => {
+    assert.equal(jarsignerVerified('jarsigner: java.lang.SecurityException: no manifest section'), false);
   });
 });
 
