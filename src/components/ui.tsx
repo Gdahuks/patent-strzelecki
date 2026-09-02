@@ -151,15 +151,28 @@ export function ModeSwitch<Key extends string>({
   options,
   value,
   onChange,
+  label,
 }: {
   options: readonly { key: Key; label: string }[];
   value: Key;
   onChange: (key: Key) => void;
+  /**
+   * What the switch as a whole chooses.
+   *
+   * Needed once a screen carries two of these: the options announce themselves as tabs, so a
+   * screen reader otherwise reads four tabs in a row with nothing saying they are two
+   * separate choices.
+   */
+  label?: string;
 }) {
   const theme = useTheme();
 
   return (
-    <View style={[styles.switch, { backgroundColor: theme.surface, borderColor: theme.border }]}>
+    <View
+      accessibilityRole="tablist"
+      accessibilityLabel={label}
+      style={[styles.switch, { backgroundColor: theme.surface, borderColor: theme.border }]}
+    >
       {options.map((option) => {
         const active = option.key === value;
         return (

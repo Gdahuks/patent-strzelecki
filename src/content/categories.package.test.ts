@@ -5,7 +5,9 @@ import { fileURLToPath } from 'node:url';
 import { describe, it } from 'vitest';
 
 import { ALL_SET_SLUG, CATEGORIES } from './categories';
+import { profileAvailable, profileLayers } from './examPool';
 import type { ContentBundle } from './types';
+import { PATENT_PROFILE, WPA_PROFILE } from '../engine/exam';
 
 /**
  * The subject-area map checked against the real bundle.
@@ -80,22 +82,30 @@ describe.skipIf(!PRESENT)('subject areas on the real bundle', () => {
   });
 
   it('accounts for every question in the bundle', () => {
+    // The two numbers are the point: they are frozen on purpose, so that a refreshed content
+    // bundle stops the build instead of quietly changing what the exam asks about.
     const inAreas = content.questions.filter((question) => areasOf(question.id).length > 0);
+    const advice = 'paczka treści odświeżona? sprawdź CATEGORIES i liczby w tym teście';
 
-    assert.equal(inAreas.length, 456);
-    assert.equal(wpa.size, 200);
-    assert.equal(content.questions.length, inAreas.length + wpa.size);
+    assert.equal(inAreas.length, 456, `pula patentowa: ${inAreas.length} — ${advice}`);
+    assert.equal(wpa.size, 200, `zestaw wpa: ${wpa.size} — ${advice}`);
   });
 
-  it('holds enough questions in every area to compose a paper', () => {
-    // `profileAvailable` makes the same check at runtime and hides the button; this one says
-    // it out loud at build time, with the area's name.
-    for (const category of CATEGORIES) {
-      const size = content.questions.filter((question) =>
-        areasOf(question.id).includes(category.slug),
-      ).length;
+  it('lets both profiles compose a paper from this bundle', () => {
+    // The one thing no unit test can see: the engine knows layers by slug and never resolves
+    // them, so a typo in `layers[].category` passes types, lint and every test on fixtures —
+    // and then shows up as an exam quietly missing from the switch.
+    for (const profile of [PATENT_PROFILE, WPA_PROFILE]) {
+      profileLayers(profile).forEach((questions, index) => {
+        const layer = profile.layers[index];
+        assert.ok(
+          questions.length >= layer.count,
+          `${profile.id}: warstwa ${layer.category} ma ${questions.length} pytań, `
+            + `potrzeba ${layer.count}`,
+        );
+      });
 
-      assert.ok(size >= 2, `${category.slug} ma ${size} pytań`);
+      assert.ok(profileAvailable(profile), profile.id);
     }
   });
 });

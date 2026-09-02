@@ -48,7 +48,10 @@ export default function EgzaminScreen() {
    * buttons and the history — „9/10" and „18/20" are different scales and must never end up
    * in one list.
    */
-  const [profileId, setProfileId] = useState<ExamProfileId>(PATENT_PROFILE.id);
+  // The first profile the bundle can actually serve, not the licence one by name: with the
+  // paper composed from subject areas, a bundle missing one set makes that exam undrawable,
+  // and the switch then hides it while the screen would still offer its button.
+  const [profileId, setProfileId] = useState<ExamProfileId>(AVAILABLE[0]?.id ?? PATENT_PROFILE.id);
   const profile = examProfile(profileId);
 
   /** `null` until the profile's history has been read — never an empty list standing in for it. */
@@ -160,8 +163,8 @@ export default function EgzaminScreen() {
         {criticals > 0 ? (
           <Muted>
             Po dwa pytania z pięciu zagadnień, zgodnie z regulaminem PZSS. Pierwsze {criticals} —
-            z UoBiA i zasad bezpieczeństwa — muszą być bezbłędne: każdy błąd w tej czwórce
-            oznacza niezdanie niezależnie od reszty wyniku.
+            z UoBiA i zasad bezpieczeństwa: każdy błąd w nich oznacza niezdanie niezależnie od
+            reszty wyniku.
           </Muted>
         ) : (
           <Muted>

@@ -138,17 +138,41 @@ describe('drawExam', () => {
 
   it('does not leak the layer structure into the question order', () => {
     // Layer-by-layer order would make question seven always a range-rules one, and positions
-    // learnable. Both halves of the paper are shuffled, the critical one included.
-    const orders = new Set<string>();
+    // learnable. Both halves of the paper are shuffled, the critical one included — and the
+    // critical half needs its own assertion, because the tail alone produces enough variety
+    // to keep a whole-paper check green while positions three and four stay the safety ones.
+    const papers = new Set<string>();
+    const heads = new Set<string>();
     for (let seed = 1; seed <= 30; seed += 1) {
-      orders.add(
-        drawExam(full(), PATENT_PROFILE, seeded(seed))
-          .map((entry) => layerOf(entry))
-          .join(''),
+      const pattern = drawExam(full(), PATENT_PROFILE, seeded(seed)).map((entry) =>
+        layerOf(entry),
       );
+      papers.add(pattern.join(''));
+      heads.add(pattern.slice(0, CRITICAL_COUNT).join(''));
     }
 
-    assert.ok(orders.size > 1, 'kolejność zagadnień w arkuszu jest stała');
+    assert.ok(papers.size > 1, 'kolejność zagadnień w arkuszu jest stała');
+    assert.ok(heads.size > 1, 'kolejność w czwórce krytycznej jest stała');
+  });
+
+  it('draws the same paper twice from the same seed', () => {
+    const first = drawExam(full(), PATENT_PROFILE, seeded(77)).map((e) => e.question.id);
+    const second = drawExam(full(), PATENT_PROFILE, seeded(77)).map((e) => e.question.id);
+
+    assert.deepEqual(first, second);
+  });
+
+  it('ignores a question repeated inside one layer pool', () => {
+    // A duplicate would otherwise reach the paper twice, and grading reads answers by
+    // question id — so one answer would count for both, decisively so in the critical four.
+    const twice = question('l0q0');
+    const pools = full();
+    pools[0] = [twice, twice, question('l0q1'), question('l0q2')];
+
+    for (let seed = 1; seed <= 40; seed += 1) {
+      const ids = drawExam(pools, PATENT_PROFILE, seeded(seed)).map((e) => e.question.id);
+      assert.equal(new Set(ids).size, ids.length);
+    }
   });
 
   it('fails loudly when a layer is too thin, naming it', () => {
@@ -379,10 +403,45 @@ describe('buildPool', () => {
     assert.doesNotThrow(() => drawExam(built, PATENT_PROFILE, seeded(8)));
   });
 
-  it('an empty database cannot rescue a layer with nothing in it', () => {
-    const pools = buildPool(preferred('l0q0'), [[], [], [], [], []], PATENT_PROFILE);
+  it('refuses a layer it cannot fill, instead of handing back a short pool', () => {
+    // Handing back a pool of one for a layer that needs two made the *draw* fail — and only
+    // for some seeds, so the same mistakes composed a paper on one tap and refused on the
+    // next. The refusal belongs here, where the shortage is known, and names the layer.
+    assert.throws(
+      () => buildPool(preferred('l0q0'), [[], [], [], [], []], PATENT_PROFILE),
+      (error: Error) =>
+        error instanceof NotEnoughQuestionsError
+        && error.category === PATENT_PROFILE.layers[0].category,
+    );
+  });
 
-    assert.throws(() => drawExam(pools, PATENT_PROFILE, seeded(1)), NotEnoughQuestionsError);
+  it('refuses deterministically when a shared question leaves a later layer short', () => {
+    // Two areas holding the same two questions: every count checks out, and the paper still
+    // cannot be composed. Whether it fails must not depend on the seed.
+    const shared = [question('s0'), question('s1')];
+    const pools = full();
+    pools[0] = [...shared];
+    pools[4] = [...shared];
+
+    assert.throws(() => buildPool([], pools, PATENT_PROFILE), NotEnoughQuestionsError);
+  });
+
+  it('ignores a mistake that belongs to no layer', () => {
+    const pools = buildPool(preferred('spoza-warstw'), full(), PATENT_PROFILE);
+
+    assert.ok(pools.every((layer) => layer.every((entry) => entry.id !== 'spoza-warstw')));
+  });
+
+  it('does not always top up with the same questions', () => {
+    // One mistake used to give the same nine companions on every attempt, because the top-up
+    // walked the layer in bundle order. The screen promises questions drawn from the area.
+    const seen = new Set<string>();
+    for (let seed = 1; seed <= 20; seed += 1) {
+      const pools = buildPool(preferred('l0q0'), full(), PATENT_PROFILE, seeded(seed));
+      seen.add(pools[2].map((entry) => entry.id).join(','));
+    }
+
+    assert.ok(seen.size > 1, 'dopełnianie zawsze bierze te same pytania');
   });
 });
 

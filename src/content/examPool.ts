@@ -8,7 +8,7 @@
 
 import type { Question } from './types';
 import { content } from './store';
-import type { ExamProfile } from '../engine/exam';
+import { type ExamProfile, NotEnoughQuestionsError, drawExam } from '../engine/exam';
 
 /**
  * Each layer's questions, in the profile's order — the shape `drawExam` and `buildPool` want.
@@ -28,16 +28,23 @@ export function profileQuestions(profile: ExamProfile): Question[] {
 /**
  * Whether this build's bundle can actually serve the profile.
  *
- * Checked **per layer**, not against the total: a paper needs its two questions from each
- * area, so a pool of 453 says nothing if one area lost its set. Offering an exam that fails
- * right after the tap is the worse failure, so a profile the bundle can't serve is offered
- * one option fewer.
+ * Answered by composing one paper and seeing whether it holds — not by counting. A pool of
+ * 456 says nothing when one area lost its set, and counting per layer is not enough either:
+ * the areas overlap, so an earlier layer can take away everything a later one had. Two areas
+ * of two questions each, holding the same two questions, pass every arithmetic check and
+ * still cannot make a paper.
+ *
+ * Offering an exam that fails right after the tap is the worse failure, so a profile the
+ * bundle can't serve is offered one option fewer.
  */
 export function profileAvailable(profile: ExamProfile): boolean {
-  return profileLayers(profile).every((questions, index) => {
-    const layer = profile.layers[index];
-    return layer !== undefined && questions.length >= layer.count;
-  });
+  try {
+    drawExam(profileLayers(profile), profile);
+    return true;
+  } catch (error) {
+    if (error instanceof NotEnoughQuestionsError) return false;
+    throw error;
+  }
 }
 
 /**

@@ -62,7 +62,9 @@ export default function CwiczeniaScreen() {
   // Progress is separate per mode, so the list shows the one currently selected. It used to
   // be shared, and a separate "Postęp" tab duplicated the same list of sets.
   const [mode, setMode] = useState<PracticeMode>('flashcards');
-  const [grouping, setGrouping] = useState<Grouping>('categories');
+  // Defaults to the course's own sets — the list the owner has been using daily. Subject
+  // areas are the other view, one tap away, not a silent replacement of a familiar screen.
+  const [grouping, setGrouping] = useState<Grouping>('sets');
   const [rows, setRows] = useState<Row[] | null>(null);
   /** Bumping this recalculates the list without leaving the screen — after resetting a set. */
   const [reload, setReload] = useState(0);
@@ -143,7 +145,7 @@ export default function CwiczeniaScreen() {
           onPress: () => router.push(`/questions/${mode}/${row.slug}`),
         },
         {
-          text: 'Wyzeruj postęp tego zestawu',
+          text: 'Wyzeruj postęp',
           style: 'destructive',
           onPress: () =>
             Alert.alert(
@@ -181,15 +183,20 @@ export default function CwiczeniaScreen() {
         <View style={styles.header}>
           <Text style={[styles.heading, { color: theme.text }]}>Ćwiczenia</Text>
 
-          <ModeSwitch options={MODES} value={mode} onChange={setMode} />
+          <ModeSwitch options={MODES} value={mode} onChange={setMode} label="Tryb ćwiczenia" />
 
-          <ModeSwitch options={GROUPINGS} value={grouping} onChange={setGrouping} />
+          <ModeSwitch
+            options={GROUPINGS}
+            value={grouping}
+            onChange={setGrouping}
+            label="Podział pytań"
+          />
 
           <Muted>
             {mode === 'flashcards'
               ? 'Fiszka pokazuje poprawną odpowiedź — chodzi o zapamiętanie jej treści.'
               : 'Test sprawdza, czy rozpoznajesz poprawną odpowiedź wśród trzech wariantów.'}{' '}
-            Postęp jest liczony osobno dla każdego trybu. Przytrzymaj zestaw, żeby przejrzeć
+            Postęp jest liczony osobno dla każdego trybu. Przytrzymaj wiersz, żeby przejrzeć
             jego pytania albo wyzerować postęp.
           </Muted>
         </View>
@@ -212,7 +219,7 @@ export default function CwiczeniaScreen() {
           // screen reader that gesture is practically nonexistent — VoiceOver and TalkBack
           // have it claimed for their own purposes. This action exposes the same menu in the
           // rotor.
-          accessibilityActions={[{ name: 'longpress', label: 'Przegląd i zerowanie zestawu' }]}
+          accessibilityActions={[{ name: 'longpress', label: 'Przegląd i zerowanie postępu' }]}
           onAccessibilityAction={(event) => {
             if (event.nativeEvent.actionName === 'longpress') onLongPress(item);
           }}

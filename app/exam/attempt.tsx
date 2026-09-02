@@ -21,6 +21,7 @@ import { positionLabel } from '../../src/content/answers';
 import { useBottomInset } from '../../src/components/safeArea';
 import { Button, Card, Muted } from '../../src/components/ui';
 import { profileLayers, profileMisses, profileQuestions } from '../../src/content/examPool';
+import { content } from '../../src/content/store';
 import type { Letter } from '../../src/content/types';
 import { missedQuestionIds, saveAttempt } from '../../src/db/database';
 import {
@@ -79,7 +80,6 @@ export default function ExamAttemptScreen() {
     let cancelled = false;
 
     void (async () => {
-      const base = profileQuestions(profile);
       const fullLayers = profileLayers(profile);
       // The pool is drawn exclusively from exam mistakes. Flashcards, the ABC quiz and the
       // exam are three independent progress tracks — mixing in questions flagged as needing
@@ -93,41 +93,53 @@ export default function ExamAttemptScreen() {
       // licence exam surfaced under WPA whenever it sat on the course's WPA list, so a profile
       // with no attempts at all still offered an exam built from mistakes in it.
       const layers = fromWeak
-        ? buildPool(profileMisses(await missedQuestionIds(profile.id), base), fullLayers, profile)
+        ? buildPool(
+            profileMisses(await missedQuestionIds(profile.id), profileQuestions(profile)),
+            fullLayers,
+            profile,
+          )
         : fullLayers;
       if (cancelled) return;
 
-      // The draw can refuse: a layer whose set vanished from the bundle, or mistakes narrowed
-      // down to nothing drawable. `profileAvailable` keeps the button away from the first case
-      // and `buildPool` tops every layer up against the second, but an unhandled rejection
-      // here used to leave the screen on its spinner for good — so the paper's refusal has to
-      // be a sentence and a way back, not a dead end.
-      try {
-        const paper = drawExam(layers, profile);
-        startedAt.current = Date.now();
-        finished.current = false;
-        setRemaining(profile.timeLimitSeconds);
-        setExam(paper);
-      } catch (error) {
-        if (!(error instanceof NotEnoughQuestionsError)) throw error;
-        Alert.alert(
-          'Nie można ułożyć arkusza',
-          'W jednym z zagadnień egzaminu brakuje pytań. Spróbuj egzaminu bez ograniczenia do '
-            + 'własnych pomyłek.',
-          [{ text: 'Wróć', onPress: () => router.back() }],
-        );
-      }
-    })();
+      const paper = drawExam(layers, profile);
+      startedAt.current = Date.now();
+      finished.current = false;
+      setRemaining(profile.timeLimitSeconds);
+      setExam(paper);
+    })().catch((error: unknown) => {
+      if (cancelled) return;
+      // Composing the paper can refuse: a layer whose set vanished from the bundle, or
+      // mistakes that leave an area with nothing to draw. Without this, the rejection escaped
+      // the async function unhandled — no error boundary sees that, so the screen sat on its
+      // spinner for good. The whole body is covered, not just the draw: a failed read of the
+      // mistake pool ended the same way.
+      const area
+        = error instanceof NotEnoughQuestionsError && error.category
+          ? content.titleForSets([error.category])
+          : null;
+      const reason = area
+        ? `W zagadnieniu „${area}" brakuje pytań na pełny arkusz.`
+        : 'Nie udało się przygotować pytań.';
+
+      Alert.alert(
+        'Nie można ułożyć arkusza',
+        fromWeak
+          ? `${reason} Spróbuj zwykłego egzaminu, bez ograniczenia do własnych pomyłek.`
+          : reason,
+        [{ text: 'Wróć', onPress: () => router.back() }],
+        // Dismissing this dialog would leave the same dead spinner it exists to replace.
+        { cancelable: false },
+      );
+    });
 
     return () => {
       cancelled = true;
     };
-    // `router` is deliberately not a dependency, although the failure path calls it. This
-    // effect draws the paper, so re-running it mid-attempt would swap the questions under
-    // the person answering them and restart the clock. The router is only ever used here to
-    // leave a paper that could not be composed at all.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [fromWeak, profile]);
+    // Nothing that changes during an attempt may go in here: this effect draws the paper, so
+    // re-running it would swap the questions under the person answering them and restart the
+    // clock. `fromWeak` is a route flag, `profile` a module constant, and expo-router's
+    // `router` is a module singleton — none of them changes mid-attempt.
+  }, [fromWeak, profile, router]);
 
   const finish = useCallback(
     (answers: Map<string, Letter | null>) => {

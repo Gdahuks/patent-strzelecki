@@ -524,8 +524,7 @@ disjoint** — 43 questions are penal provisions of the Act itself, so they belo
 and the draw dedupes within the paper.
 
 The design, the numbers behind it, and what is still unresolved (whether real papers open with
-2+2 or 4 questions from the Act) are in the scraper repository:
-`docs/superpowers/specs/2026-09-02-warstwowe-losowanie-egzaminu-design.md`.
+2+2 or 4 questions from the Act) are written up in the scraper repo, alongside the other specs.
 
 The local version does not reproduce the course's server-side, shared attempt history stored
 under a "key", nor its four paper lengths and three pool switches — coverage of the base is what

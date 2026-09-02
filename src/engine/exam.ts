@@ -130,7 +130,20 @@ export interface ExamResult {
   answers: ExamAnswer[];
 }
 
-export class NotEnoughQuestionsError extends Error {}
+/**
+ * A layer cannot fill its slots on the paper.
+ *
+ * Carries the layer's category slug so the screen can name the area in Polish instead of
+ * parsing it back out of the message.
+ */
+export class NotEnoughQuestionsError extends Error {
+  constructor(
+    message: string,
+    readonly category?: string,
+  ) {
+    super(message);
+  }
+}
 
 /**
  * Numbers of unanswered questions, counting from one.
@@ -204,15 +217,13 @@ export function buildPool(
   preferred: Question[],
   fallbackLayers: Question[][],
   profile: ExamProfile,
+  random: () => number = Math.random,
 ): Question[][] {
   const pooledEarlier = new Set<string>();
 
   return profile.layers.map((layer, index) => {
     const full = fallbackLayers[index] ?? [];
     const inLayer = new Set(full.map((question) => question.id));
-    // Deduplicated on the way in. `latestMisses` can't hand over the same question twice
-    // today, but a duplicate inside a layer's pool would survive the draw's dedup — that one
-    // only skips what is already **on the paper** — and land twice on the sheet.
     const pool: Question[] = [];
     const taken = new Set<string>();
     for (const question of preferred) {
@@ -222,11 +233,25 @@ export function buildPool(
     }
     const secured = () => pool.filter((question) => !pooledEarlier.has(question.id)).length;
 
-    for (const question of full) {
+    // The top-up is drawn, not taken off the front of the layer. Walking `full` in bundle
+    // order made an exam from a single mistake the *same nine questions* every time — only
+    // their order changed — and the screen promises questions "dobierane z całej puli tego
+    // zagadnienia".
+    for (const question of shuffle(full, random)) {
       if (secured() >= layer.count) break;
       if (taken.has(question.id) || pooledEarlier.has(question.id)) continue;
       pool.push(question);
       taken.add(question.id);
+    }
+
+    // Refuse here rather than hand back a layer that cannot fill its slots: otherwise the
+    // draw's success depends on the seed, so the same mistakes would compose a paper on one
+    // tap and refuse on the next. The message names the layer, which is what the screen shows.
+    if (secured() < layer.count) {
+      throw new NotEnoughQuestionsError(
+        `warstwa ${layer.category} ma ${secured()} pytań, potrzeba ${layer.count}`,
+        layer.category,
+      );
     }
 
     for (const question of pool) pooledEarlier.add(question.id);
@@ -253,14 +278,22 @@ export function drawExam(
 
   profile.layers.forEach((layer, index) => {
     // Layers overlap, so what's already on the paper is off the table — otherwise a question
-    // that is both a provision of the Act and a penal one could be asked twice.
-    const available = (layers[index] ?? []).filter((question) => !taken.has(question.id));
+    // that is both a provision of the Act and a penal one could be asked twice. The same pass
+    // drops repeats **inside** one layer's pool: two copies of one question would otherwise
+    // both survive into the paper, and grading reads answers by question id, so a single
+    // answer would count twice — decisive when it lands in the critical four.
+    const unique = new Map<string, Question>();
+    for (const question of layers[index] ?? []) {
+      if (!taken.has(question.id)) unique.set(question.id, question);
+    }
+    const available = [...unique.values()];
 
     // A thin layer does not borrow from the others. Borrowing would turn "two questions from
     // each area" into a promise whose breaking is invisible — the paper would look complete.
     if (available.length < layer.count) {
       throw new NotEnoughQuestionsError(
         `warstwa ${layer.category} ma ${available.length} pytań, potrzeba ${layer.count}`,
+        layer.category,
       );
     }
 

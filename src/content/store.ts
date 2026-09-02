@@ -130,5 +130,5 @@ export const content = {
     slug: entry.slug,
     title: entry.title,
     questionIds: [...new Set(idsForSlug(entry.slug))],
-  })) as readonly QuestionSet[],
+  })) satisfies QuestionSet[] as readonly QuestionSet[],
 };
