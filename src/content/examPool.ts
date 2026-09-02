@@ -10,21 +10,34 @@ import type { Question } from './types';
 import { content } from './store';
 import type { ExamProfile } from '../engine/exam';
 
-/** The whole question base, or just the sets the profile names. */
+/**
+ * Each layer's questions, in the profile's order — the shape `drawExam` and `buildPool` want.
+ *
+ * A layer names its category by slug and `questionsForSets` resolves both categories and plain
+ * course sets, so the police exam (one layer, the course's `wpa` set) needs no special case.
+ */
+export function profileLayers(profile: ExamProfile): Question[][] {
+  return profile.layers.map((layer) => content.questionsForSets([layer.category]));
+}
+
+/** Every question the profile can ask, deduplicated — layers overlap. */
 export function profileQuestions(profile: ExamProfile): Question[] {
-  return profile.setSlugs ? content.questionsForSets([...profile.setSlugs]) : content.questions;
+  return content.questionsForSets(profile.layers.map((layer) => layer.category));
 }
 
 /**
  * Whether this build's bundle can actually serve the profile.
  *
- * A profile drawing from a named set depends on the bundle carrying that set. It does today,
- * and the scraper would notice if it stopped — but a screen that offers an exam it cannot
- * draw would fail at the worst moment, right after the tap. Offering one option fewer is the
- * better failure.
+ * Checked **per layer**, not against the total: a paper needs its two questions from each
+ * area, so a pool of 453 says nothing if one area lost its set. Offering an exam that fails
+ * right after the tap is the worse failure, so a profile the bundle can't serve is offered
+ * one option fewer.
  */
 export function profileAvailable(profile: ExamProfile): boolean {
-  return profileQuestions(profile).length >= profile.questionCount;
+  return profileLayers(profile).every((questions, index) => {
+    const layer = profile.layers[index];
+    return layer !== undefined && questions.length >= layer.count;
+  });
 }
 
 /**
@@ -34,6 +47,9 @@ export function profileAvailable(profile: ExamProfile): boolean {
  * profile. This is the second, narrower guard: a profile's pool comes from the content bundle,
  * and the bundle can change under a database that outlives it. A question dropped from the
  * course's WPA list would otherwise come back on a WPA paper through an old attempt.
+ *
+ * It also filters out what the patent profile stopped asking when the paper's composition
+ * changed: the 200 police-exam questions and the handful outside the regulation's scope.
  *
  * It has to be the same call on the exam screen and inside the attempt, or the count next to
  * the button would promise questions the draw can't use.

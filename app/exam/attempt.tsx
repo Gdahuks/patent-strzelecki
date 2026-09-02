@@ -20,14 +20,16 @@ import { ExamStrip } from '../../src/components/ExamStrip';
 import { positionLabel } from '../../src/content/answers';
 import { useBottomInset } from '../../src/components/safeArea';
 import { Button, Card, Muted } from '../../src/components/ui';
-import { profileMisses, profileQuestions } from '../../src/content/examPool';
+import { profileLayers, profileMisses, profileQuestions } from '../../src/content/examPool';
 import type { Letter } from '../../src/content/types';
 import { missedQuestionIds, saveAttempt } from '../../src/db/database';
 import {
   type ExamProfile,
   type ExamQuestion,
   type ExamResult,
+  NotEnoughQuestionsError,
   buildPool,
+  criticalCount,
   drawExam,
   examProfile,
   formatRemaining,
@@ -78,31 +80,53 @@ export default function ExamAttemptScreen() {
 
     void (async () => {
       const base = profileQuestions(profile);
+      const fullLayers = profileLayers(profile);
       // The pool is drawn exclusively from exam mistakes. Flashcards, the ABC quiz and the
       // exam are three independent progress tracks — mixing in questions flagged as needing
       // work from practice mode would blend the measurement with the training and desync the
       // counter next to the button from what actually goes into the draw. `buildPool` stays
-      // in the mix because there can be fewer mistakes than the paper has questions, and none
-      // of them has to be critical.
+      // in the mix because the mistakes can be fewer than the paper needs, or all sitting in
+      // one subject area — it tops every layer up on its own.
       //
       // The mistakes come from this profile's own attempts and are then narrowed to its pool.
       // Sharing them across profiles was tried and reported as a bug: a question missed on the
       // licence exam surfaced under WPA whenever it sat on the course's WPA list, so a profile
       // with no attempts at all still offered an exam built from mistakes in it.
-      const questions = fromWeak
-        ? buildPool(profileMisses(await missedQuestionIds(profile.id), base), base, profile)
-        : base;
+      const layers = fromWeak
+        ? buildPool(profileMisses(await missedQuestionIds(profile.id), base), fullLayers, profile)
+        : fullLayers;
       if (cancelled) return;
 
-      startedAt.current = Date.now();
-      finished.current = false;
-      setRemaining(profile.timeLimitSeconds);
-      setExam(drawExam(questions, profile));
+      // The draw can refuse: a layer whose set vanished from the bundle, or mistakes narrowed
+      // down to nothing drawable. `profileAvailable` keeps the button away from the first case
+      // and `buildPool` tops every layer up against the second, but an unhandled rejection
+      // here used to leave the screen on its spinner for good — so the paper's refusal has to
+      // be a sentence and a way back, not a dead end.
+      try {
+        const paper = drawExam(layers, profile);
+        startedAt.current = Date.now();
+        finished.current = false;
+        setRemaining(profile.timeLimitSeconds);
+        setExam(paper);
+      } catch (error) {
+        if (!(error instanceof NotEnoughQuestionsError)) throw error;
+        Alert.alert(
+          'Nie można ułożyć arkusza',
+          'W jednym z zagadnień egzaminu brakuje pytań. Spróbuj egzaminu bez ograniczenia do '
+            + 'własnych pomyłek.',
+          [{ text: 'Wróć', onPress: () => router.back() }],
+        );
+      }
     })();
 
     return () => {
       cancelled = true;
     };
+    // `router` is deliberately not a dependency, although the failure path calls it. This
+    // effect draws the paper, so re-running it mid-attempt would swap the questions under
+    // the person answering them and restart the clock. The router is only ever used here to
+    // leave a paper that could not be composed at all.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [fromWeak, profile]);
 
   const finish = useCallback(
@@ -442,7 +466,7 @@ function ExamSummary({
         {result.failedOnCritical ? (
           <Text style={{ color: theme.critical, fontSize: 14 }}>
             Wynik wystarczał na zaliczenie (próg {profile.passThreshold}/{profile.questionCount}),
-            ale błąd padł w pierwszych {profile.criticalCount} pytaniach — to oznacza niezdanie.
+            ale błąd padł w pierwszych {criticalCount(profile)} pytaniach — to oznacza niezdanie.
           </Text>
         ) : null}
         {result.passed ? <Muted>Taki wynik zalicza prawdziwy egzamin.</Muted> : null}

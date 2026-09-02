@@ -16,7 +16,7 @@ import {
   type ExamProfileId,
   PATENT_PROFILE,
   examProfile,
-  isCritical,
+  criticalCount,
 } from '../../src/engine/exam';
 import { plural } from '../../src/engine/plural';
 import { useTheme } from '../../src/theme';
@@ -136,9 +136,9 @@ export default function EgzaminScreen() {
     );
   }, [profile, refresh]);
 
-  const criticalPool = pool.filter((question) => isCritical(question, profile)).length;
   const passed = (attempts ?? []).filter((attempt) => attempt.passed).length;
   const minutes = profile.timeLimitSeconds / 60;
+  const criticals = criticalCount(profile);
 
   return (
     <ScrollView contentContainerStyle={styles.body}>
@@ -157,11 +157,11 @@ export default function EgzaminScreen() {
           {profile.questionCount} pytań · {minutes} minut · próg {profile.passThreshold}/
           {profile.questionCount}
         </Text>
-        {profile.criticalCount > 0 ? (
+        {criticals > 0 ? (
           <Muted>
-            Pierwsze {profile.criticalCount} pytania pochodzą z UoBiA i zasad bezpieczeństwa. Każdy
-            błąd w tej czwórce oznacza niezdanie niezależnie od reszty wyniku — tak samo jak na
-            prawdziwym egzaminie PZSS.
+            Po dwa pytania z pięciu zagadnień, zgodnie z regulaminem PZSS. Pierwsze {criticals} —
+            z UoBiA i zasad bezpieczeństwa — muszą być bezbłędne: każdy błąd w tej czwórce
+            oznacza niezdanie niezależnie od reszty wyniku.
           </Muted>
         ) : (
           <Muted>
@@ -170,9 +170,7 @@ export default function EgzaminScreen() {
           </Muted>
         )}
         <Muted>
-          Kolejność pytań i odpowiedzi jest losowana, żeby nie dało się wkuwać pozycji. Losujemy
-          z {pool.length} pytań
-          {profile.criticalCount > 0 ? `, w tym ${criticalPool} krytycznych` : ''}.
+          Kolejność pytań i odpowiedzi jest losowana, żeby nie dało się wkuwać pozycji.
         </Muted>
       </Card>
 
@@ -196,9 +194,8 @@ export default function EgzaminScreen() {
                 „z 1 pytania, na których". One mistake is the common case on a fresh
                 profile, since each exam keeps its own pool. */}
             {plural(missedCount, 'na którym', 'na których', 'na których')} pomyliłeś się
-            w tym egzaminie. Zasady te same; gdy błędów nie starcza na pełny zestaw
-            {profile.criticalCount > 0 ? ' albo na czwórkę krytyczną' : ''}, pula dopełniana jest
-            z całej puli tego egzaminu.
+            w tym egzaminie. Zasady te same; gdy błędów nie starcza w jakimś zagadnieniu, brakujące
+            pytania dobierane są z całej puli tego zagadnienia.
           </Muted>
         </>
       ) : null}

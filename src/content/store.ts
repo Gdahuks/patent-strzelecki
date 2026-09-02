@@ -7,6 +7,7 @@
  * relative image paths to resolve against.
  */
 
+import { ALL_SET_SLUG, CATEGORIES, category } from './categories';
 import type { ContentBundle, Lesson, Question, QuestionSet } from './types';
 
 /**
@@ -21,6 +22,36 @@ const bundle = require('../../assets/content/content.json') as ContentBundle;
 const questionsById = new Map(bundle.questions.map((question) => [question.id, question]));
 const lessonsBySlug = new Map(bundle.lessons.map((lesson) => [lesson.slug, lesson]));
 const setsBySlug = new Map(bundle.sets.map((set) => [set.slug, set]));
+
+/**
+ * Questions the course files under no subject at all — see `Category.includeUnassigned`.
+ *
+ * Computed once from the bundle: everything that belongs to no set except the umbrella one.
+ */
+const unassignedIds: string[] = (() => {
+  const assigned = new Set<string>();
+  for (const set of bundle.sets) {
+    if (set.slug === ALL_SET_SLUG) continue;
+    for (const id of set.questionIds) assigned.add(id);
+  }
+  return bundle.questions
+    .filter((question) => !assigned.has(question.id))
+    .map((question) => question.id);
+})();
+
+/**
+ * Question ids behind a slug, which may name either a course set or one of our categories.
+ *
+ * Having this in one place is what keeps the practice screen, the question browser and the
+ * exam drawing from the same definition of a subject area.
+ */
+function idsForSlug(slug: string): string[] {
+  const entry = category(slug);
+  if (!entry) return setsBySlug.get(slug)?.questionIds ?? [];
+
+  const ids = entry.setSlugs.flatMap((setSlug) => setsBySlug.get(setSlug)?.questionIds ?? []);
+  return entry.includeUnassigned ? [...ids, ...unassignedIds] : ids;
+}
 
 export const content = {
   version: bundle.version,
@@ -49,13 +80,14 @@ export const content = {
   /**
    * Questions for one or several sets at once, without duplicates.
    * Compound sets ("uobia,pzss") are just a shorthand in the course, so we assemble them
-   * ourselves.
+   * ourselves. A slug naming one of our exam categories resolves the same way, which is why
+   * the practice and question-browser screens needed no change to gain them.
    */
   questionsForSets(slugs: string[]): Question[] {
     const seen = new Set<string>();
     const result: Question[] = [];
     for (const slug of slugs) {
-      for (const id of setsBySlug.get(slug)?.questionIds ?? []) {
+      for (const id of idsForSlug(slug)) {
         if (seen.has(id)) continue;
         seen.add(id);
         const question = questionsById.get(id);
@@ -81,9 +113,22 @@ export const content = {
 
   /** A set's title — for practice screen headers. */
   titleForSets(slugs: string[]): string {
-    const titles = slugs.map((slug) =>
-      slug === WEAK_SET_SLUG ? WEAK_SET_TITLE : (setsBySlug.get(slug)?.title ?? slug),
-    );
+    const titles = slugs.map((slug) => {
+      if (slug === WEAK_SET_SLUG) return WEAK_SET_TITLE;
+      return category(slug)?.title ?? setsBySlug.get(slug)?.title ?? slug;
+    });
     return titles.length === 1 ? titles[0] : titles.join(' + ');
   },
+
+  /**
+   * The five exam subject areas, with their questions counted.
+   *
+   * Same shape as `sets`, so the practice screen can swap one list for the other without
+   * knowing which of the two it is showing.
+   */
+  categories: CATEGORIES.map((entry) => ({
+    slug: entry.slug,
+    title: entry.title,
+    questionIds: [...new Set(idsForSlug(entry.slug))],
+  })) as readonly QuestionSet[],
 };

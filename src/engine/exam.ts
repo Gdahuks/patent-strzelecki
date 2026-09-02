@@ -2,18 +2,21 @@
  * Mock exams, in two flavours — the app reproduces two real exams rather than offering a
  * configurator like the course website does:
  *
- *   - the PZSS licence exam ("patent"), taken from the course's /patent-egzamin page:
- *     10 questions, 20 minutes, a 9/10 pass mark, and the first 4 questions drawn from
- *     UoBiA and the safety rules, all of which must be correct — any mistake in that group
- *     of four fails the exam regardless of the rest of the score;
+ *   - the PZSS licence exam ("patent"), whose shape comes from § 19 of the PZSS licence
+ *     regulation: 10 questions, 20 minutes, a 9/10 pass mark, **two questions from each of
+ *     five subject areas** (ust. 1), and the first four — those from the Act and the safety
+ *     rules — all of which must be correct, any mistake there failing the exam regardless of
+ *     the rest of the score (ust. 6);
  *   - the firearms-licence exam taken before a police committee ("WPA"), whose rules come
  *     straight from § 4 of the exam regulation the app ships offline (Dz.U. 2023 poz. 1475):
  *     20 questions, 30 minutes, a pass mark of 18. It has no critical group — that one is a
  *     PZSS invention, not a statutory rule.
  *
  * Everything that differs between them lives in `ExamProfile`, so the screens carry no
- * arithmetic of their own. The module is pure — no React Native, no database — so it can be
- * tested without the app.
+ * arithmetic of their own. The module is pure — no React Native, no database, no content
+ * bundle — so it can be tested without the app. That is why a layer names its category by
+ * slug: turning slugs into questions is `content/examPool`'s job, and the engine never learns
+ * what a course set is.
  */
 
 import type { Letter, Question } from '../content/types';
@@ -21,49 +24,73 @@ import { shuffle } from './leitner';
 
 export type ExamProfileId = 'patent' | 'wpa';
 
+/**
+ * One band of the paper: how many questions come from which subject area.
+ *
+ * `critical` marks the zero-tolerance group. Criticality is a property of the **layer**, not
+ * of the question: an earlier version derived it from the question's lesson, and since 163 of
+ * the 200 police-exam questions carry the lesson `uobia`, they kept landing in the group where
+ * a single mistake fails the paper — while safety questions, 24 against a critical pool of
+ * 415, were missing from it in 79% of papers.
+ */
+export interface ExamLayer {
+  /** Category slug, resolved to questions outside the engine. */
+  category: string;
+  count: number;
+  critical: boolean;
+}
+
 export interface ExamProfile {
   id: ExamProfileId;
   /** Label on the switch, and the name the exam is known by. */
   title: string;
+  /**
+   * Questions on the paper. Always the sum of the layers' counts — kept explicit because the
+   * history and result screens read it as the denominator of every past attempt, so it must
+   * not silently change when a layer is edited. A test pins the two together.
+   */
   questionCount: number;
-  /** Questions at the front of the paper that must all be correct. Zero means no such group. */
-  criticalCount: number;
   passThreshold: number;
   timeLimitSeconds: number;
-  /** Lessons that critical questions are drawn from — empty when the profile has none. */
-  criticalLessons: readonly string[];
-  /**
-   * Content sets the pool is drawn from, or `null` for the whole question base.
-   *
-   * The WPA list is the course's own selection of 200 questions, shipped in the bundle —
-   * not a rule we derive from the regulation's subject-matter scope. Deriving it would put
-   * us in the position of deciding which questions the exam covers, and the course authors
-   * have already made that call.
-   */
-  setSlugs: readonly string[] | null;
+  /** Composition of the paper, critical layers first. */
+  layers: readonly ExamLayer[];
 }
 
 export const PATENT_PROFILE: ExamProfile = {
   id: 'patent',
   title: 'Patent PZSS',
   questionCount: 10,
-  criticalCount: 4,
   passThreshold: 9,
   timeLimitSeconds: 20 * 60,
-  criticalLessons: ['uobia', 'bezpieczenstwo'],
-  setSlugs: null,
+  // § 19 ust. 1: two questions from each of the five areas. The first two layers are the
+  // zero-tolerance group of ust. 6 — "pierwsze cztery pytania dotyczące UoBiA oraz zasad
+  // bezpieczeństwa" — so their order here is the order on the paper.
+  layers: [
+    { category: 'zg-uobia', count: 2, critical: true },
+    { category: 'zg-bezpieczenstwo', count: 2, critical: true },
+    { category: 'zg-regulaminy', count: 2, critical: false },
+    { category: 'zg-budowa', count: 2, critical: false },
+    { category: 'zg-prawo-karne', count: 2, critical: false },
+  ],
 };
 
 export const WPA_PROFILE: ExamProfile = {
   id: 'wpa',
   title: 'WPA',
   questionCount: 20,
-  criticalCount: 0,
   passThreshold: 18,
   timeLimitSeconds: 30 * 60,
-  criticalLessons: [],
-  setSlugs: ['wpa'],
+  // The whole paper from the course's copy of the official police question set. One layer
+  // rather than a special case, so both exams go through the same drawing code.
+  layers: [{ category: 'wpa', count: 20, critical: false }],
 };
+
+/** Questions at the front of the paper that must all be correct. Zero means no such group. */
+export function criticalCount(profile: ExamProfile): number {
+  return profile.layers
+    .filter((layer) => layer.critical)
+    .reduce((sum, layer) => sum + layer.count, 0);
+}
 
 export const EXAM_PROFILES: readonly ExamProfile[] = [PATENT_PROFILE, WPA_PROFILE];
 
@@ -101,10 +128,6 @@ export interface ExamResult {
    */
   failedOnCritical: boolean;
   answers: ExamAnswer[];
-}
-
-export function isCritical(question: Question, profile: ExamProfile): boolean {
-  return profile.criticalLessons.includes(question.lesson);
 }
 
 export class NotEnoughQuestionsError extends Error {}
@@ -157,85 +180,106 @@ export function latestMisses(
 }
 
 /**
- * Builds the drawing pool from the preferred questions, topping it up from the fallback.
+ * Builds the per-layer drawing pools from the preferred questions, topping each up from the
+ * layer's full pool.
  *
- * An exam built from your own mistakes can't blow up just because there aren't enough of
- * them, or none happen to be critical — `drawExam` requires a full paper, and the licence
- * exam additionally requires four critical questions. So we top the pool up to that
- * minimum: critical questions first, then the rest. The preferred questions stay in the
- * pool in full, so the exam still focuses on what you don't know.
+ * An exam built from your own mistakes can't blow up just because they all sit in one subject
+ * area — `drawExam` needs its `count` from **every** layer, so each is topped up on its own.
+ * Topping up globally, as an earlier version did, made the paper undrawable exactly when the
+ * mistakes were lopsided: six mistakes all from the Act looked like a full pool, and the draw
+ * then failed on the layer that had nothing.
+ *
+ * The preferred questions stay in their layer in full, so the exam still focuses on what you
+ * don't know.
+ *
+ * Top-ups deliberately ignore questions already pooled for an earlier layer. Layers are not
+ * disjoint — 43 questions are penal provisions of the Act itself, so they belong to both the
+ * first area and the fifth — and the draw dedupes across the whole paper. Counting only
+ * questions no earlier layer can take away is what guarantees every layer still has enough
+ * once the shared ones are gone.
+ *
+ * @param fallbackLayers each layer's full pool, in profile order
  */
 export function buildPool(
   preferred: Question[],
-  fallback: Question[],
+  fallbackLayers: Question[][],
   profile: ExamProfile,
-): Question[] {
-  const pool = [...preferred];
-  const taken = new Set(pool.map((question) => question.id));
-  const criticalInPool = () => pool.filter((question) => isCritical(question, profile)).length;
+): Question[][] {
+  const pooledEarlier = new Set<string>();
 
-  if (criticalInPool() < profile.criticalCount) {
-    for (const question of fallback) {
-      if (criticalInPool() >= profile.criticalCount) break;
-      if (isCritical(question, profile) && !taken.has(question.id)) {
-        pool.push(question);
-        taken.add(question.id);
-      }
-    }
-  }
-
-  for (const question of fallback) {
-    if (pool.length >= profile.questionCount) break;
-    if (!taken.has(question.id)) {
+  return profile.layers.map((layer, index) => {
+    const full = fallbackLayers[index] ?? [];
+    const inLayer = new Set(full.map((question) => question.id));
+    // Deduplicated on the way in. `latestMisses` can't hand over the same question twice
+    // today, but a duplicate inside a layer's pool would survive the draw's dedup — that one
+    // only skips what is already **on the paper** — and land twice on the sheet.
+    const pool: Question[] = [];
+    const taken = new Set<string>();
+    for (const question of preferred) {
+      if (!inLayer.has(question.id) || taken.has(question.id)) continue;
       pool.push(question);
       taken.add(question.id);
     }
-  }
+    const secured = () => pool.filter((question) => !pooledEarlier.has(question.id)).length;
 
-  return pool;
+    for (const question of full) {
+      if (secured() >= layer.count) break;
+      if (taken.has(question.id) || pooledEarlier.has(question.id)) continue;
+      pool.push(question);
+      taken.add(question.id);
+    }
+
+    for (const question of pool) pooledEarlier.add(question.id);
+    return pool;
+  });
 }
 
 /**
- * Draws the exam set: the critical questions first, then the rest.
+ * Draws the paper: `count` questions from each layer, critical layers first.
  *
- * A profile with no critical group skips that split entirely rather than asking for zero
- * critical questions — the whole pool is then one flat draw.
+ * A profile with no critical layer, like the police exam, comes out as one flat draw — no
+ * special case needed, the critical group is simply empty.
+ *
+ * @param layers each layer's pool, in the same order as `profile.layers`
  */
 export function drawExam(
-  pool: Question[],
+  layers: Question[][],
   profile: ExamProfile,
   random: () => number = Math.random,
 ): ExamQuestion[] {
-  const hasCritical = profile.criticalCount > 0;
-  const critical = hasCritical ? pool.filter((question) => isCritical(question, profile)) : [];
-  const rest = hasCritical
-    ? pool.filter((question) => !isCritical(question, profile))
-    : pool;
+  const critical: Question[] = [];
+  const rest: Question[] = [];
+  const taken = new Set<string>();
 
-  if (critical.length < profile.criticalCount) {
-    throw new NotEnoughQuestionsError(
-      `pula krytyczna ma ${critical.length} pytań, potrzeba ${profile.criticalCount}`,
-    );
-  }
-  if (pool.length < profile.questionCount) {
-    throw new NotEnoughQuestionsError(
-      `pula ma ${pool.length} pytań, potrzeba ${profile.questionCount}`,
-    );
-  }
+  profile.layers.forEach((layer, index) => {
+    // Layers overlap, so what's already on the paper is off the table — otherwise a question
+    // that is both a provision of the Act and a penal one could be asked twice.
+    const available = (layers[index] ?? []).filter((question) => !taken.has(question.id));
 
-  const drawnCritical = shuffle(critical, random).slice(0, profile.criticalCount);
-  const chosen = new Set(drawnCritical.map((question) => question.id));
+    // A thin layer does not borrow from the others. Borrowing would turn "two questions from
+    // each area" into a promise whose breaking is invisible — the paper would look complete.
+    if (available.length < layer.count) {
+      throw new NotEnoughQuestionsError(
+        `warstwa ${layer.category} ma ${available.length} pytań, potrzeba ${layer.count}`,
+      );
+    }
 
-  // If there aren't enough non-critical questions, we draw extra ones from the critical
-  // pool — the paper has to be complete.
-  const fillers = shuffle([...rest, ...critical.filter((q) => !chosen.has(q.id))], random)
-    .filter((question) => !chosen.has(question.id))
-    .slice(0, profile.questionCount - profile.criticalCount);
+    const drawn = shuffle(available, random).slice(0, layer.count);
+    for (const question of drawn) taken.add(question.id);
+    (layer.critical ? critical : rest).push(...drawn);
+  });
 
-  return [...drawnCritical, ...fillers].map((question, index) => ({
+  // Both halves are shuffled after the draw, because layer-by-layer order would leak the
+  // structure — question seven would always be about range rules, and positions would become
+  // learnable. That applies to the critical group too: § 19 ust. 6 fixes *which* questions
+  // open the paper ("pierwsze cztery pytania dotyczące UoBiA oraz zasad bezpieczeństwa") but
+  // says nothing about their order inside the four, and leaving them layer-ordered would
+  // teach that positions three and four are always the safety ones. The `critical` flag is
+  // positional over the whole group, so shuffling within it costs nothing.
+  return [...shuffle(critical, random), ...shuffle(rest, random)].map((question, index) => ({
     question,
     order: shuffle(Object.keys(question.answers) as Letter[], random),
-    critical: index < profile.criticalCount,
+    critical: index < critical.length,
   }));
 }
 

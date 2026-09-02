@@ -361,9 +361,18 @@ history alike. It used to exist as two copies, one per screen, and they drifted 
 change. Both sections must look identical — the only difference is the line showing your own
 answer, which there's no reason to show when you got it right.
 
-**An exam built from the weak-question pool goes through `buildPool`**, because `drawExam`
-requires four critical questions and ten in total — and there may be fewer mistakes than that,
-none of them critical. Without topping the pool up from the database, the screen would throw.
+**An exam built from the weak-question pool goes through `buildPool`, which tops up every
+subject area separately.** `drawExam` needs its two questions from each of the five areas, and
+mistakes are usually lopsided — six of them all from the Act look like a full pool while the
+draw has nothing to take from the range-regulations area. Topping up globally (the earlier
+rule) produced exactly that: an exception thrown from an async effect, which no error boundary
+catches, leaving the attempt screen on its spinner for good. Hence also the `try/catch` around
+composing the paper in `app/exam/attempt.tsx` — and `profileAvailable` checking each area on
+its own rather than the pool's total size, which says nothing.
+
+The top-up skips questions already pooled for an earlier area: since the areas overlap and the
+draw dedupes across the paper, counting only questions no earlier area can take away is what
+keeps the last area from coming out one question short.
 
 **Search matches from the start of a word, not anywhere inside it.** A plain `includes` made
 "bron" (gun) match inside "obrona" (defence). `findAtWordStart` gets the same effect without a
@@ -496,12 +505,31 @@ around. That's also why the reading-progress rules live in `src/engine/readingPr
 `src/db/reading.ts` only re-exporting them. Don't merge them back together — the tests will stop
 running.
 
-## Exam rules (reproduced from the course)
+## Exam rules (from § 19 of the PZSS regulation, not from the course)
 
-10 questions, 20 minutes, a 9/10 pass mark. The first 4 questions come from UoBiA and the safety
-rules, and **must all be correct** — a mistake in that group of four fails the exam regardless
-of the overall score. Question order and answer order are both shuffled. The local version does
-not reproduce the course's server-side, shared attempt history stored under a "key".
+10 questions, 20 minutes, a 9/10 pass mark, and **two questions from each of five subject
+areas** — the Act and its regulations, safety rules, range/sport regulations, firearm
+construction and technical data, penal law. The first 4 questions are the two from the Act and
+the two safety ones, and they **must all be correct**: a mistake there fails the exam
+regardless of the overall score. Question order and answer order are both shuffled, inside the
+critical four as well.
+
+**The composition comes from the regulation, not from the course's quiz.** The course draws its
+mock exam flat from all 656 questions, which is why a paper there was ~3.4 questions from the
+police (WPA) list, 0.45 from the safety rules and 0.33 from the range regulations — and why 79%
+of papers had no safety question in the group where a single mistake fails you. The course
+describes the 2×5 rule on its own page and doesn't implement it; the app does. The areas are
+sums of the course's own sets, declared in `src/content/categories.ts`, and they are **not
+disjoint** — 43 questions are penal provisions of the Act itself, so they belong to two areas
+and the draw dedupes within the paper.
+
+The design, the numbers behind it, and what is still unresolved (whether real papers open with
+2+2 or 4 questions from the Act) are in the scraper repository:
+`docs/superpowers/specs/2026-09-02-warstwowe-losowanie-egzaminu-design.md`.
+
+The local version does not reproduce the course's server-side, shared attempt history stored
+under a "key", nor its four paper lengths and three pool switches — coverage of the base is what
+the practice tab is for.
 
 Flashcards and the ABC quiz are different tools: a flashcard shows **only the correct answer**
 (the goal is memorising its content), the quiz practises recognising it among distractors.
