@@ -198,18 +198,17 @@ export default function LessonScreen() {
     }, [track]),
   );
 
-  const toggleRead = useCallback(() => {
-    const next: ReadingState = readState === 'read' ? 'started' : 'read';
+  const markRead = useCallback(() => {
+    const next: ReadingState = 'read';
     setReadState(next);
     void setReadingState(slug, next);
     // Marking it read by hand puts the peak at the end, so the tracker has nothing left to
-    // raise and won't write over the state that was just chosen.
-    // The tracker only ever writes a peak that beats the stored one, so its in-memory copy has
-    // to follow the state chosen by hand — otherwise unmarking a lesson would leave the peak at
-    // the end and the tracker could never mark it read again.
-    dwell.current = newDwell(next === 'read' ? 1 : 0);
-    savedPeak.current = next === 'read' ? 1 : 0;
-  }, [readState, slug]);
+    // raise and won't write over the state that was just chosen. Unmarking is not reachable
+    // from here — the row disappears once the lesson is read — and the list's long-press menu
+    // resets the peak on its own, so the tracker can mark such a lesson again.
+    dwell.current = newDwell(1);
+    savedPeak.current = 1;
+  }, [slug]);
 
   /**
    * Guards against navigation that wasn't triggered by a click — a script-driven redirect,
@@ -369,24 +368,23 @@ export default function LessonScreen() {
             empty, because its bottom inset is what keeps the content clear of the system
             navigation bar. */}
         {readState === 'read' ? null : (
-        <Pressable
-          onPress={toggleRead}
-          accessibilityRole="button"
-          accessibilityLabel="Oznacz jako przeczytane"
-          accessibilityState={{ checked: false }}
-          style={({ pressed }) => [
-            styles.readToggle,
-            {
-              borderTopColor: theme.border,
-              borderTopWidth: sets.length > 0 ? StyleSheet.hairlineWidth : 0,
-            },
-            pressed && styles.pressed,
-          ]}
-        >
-          <Text style={{ color: theme.accent, fontSize: 15, fontWeight: '600' }}>
-            Oznacz jako przeczytane
-          </Text>
-        </Pressable>
+          <Pressable
+            onPress={markRead}
+            accessibilityRole="button"
+            accessibilityLabel="Oznacz jako przeczytane"
+            style={({ pressed }) => [
+              styles.readToggle,
+              {
+                borderTopColor: theme.border,
+                borderTopWidth: sets.length > 0 ? StyleSheet.hairlineWidth : 0,
+              },
+              pressed && styles.pressed,
+            ]}
+          >
+            <Text style={{ color: theme.accent, fontSize: 15, fontWeight: '600' }}>
+              Oznacz jako przeczytane
+            </Text>
+          </Pressable>
         )}
       </View>
     </View>
