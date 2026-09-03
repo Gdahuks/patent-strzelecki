@@ -1,4 +1,4 @@
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 
 import { content } from '../content/store';
 import type { AreaTally, ExamProfile } from '../engine/exam';
@@ -61,6 +61,9 @@ export function AreaStandings({
   onOpen: (slug: string) => void;
 }) {
   const theme = useTheme();
+  // The number columns are sized in points, so they have to grow with the system font: at a
+  // larger scale a constant 44 would clip "100%". Text scales itself, a fixed width doesn't.
+  const { fontScale } = useWindowDimensions();
 
   // The areas in paper order: bands as the profile lists them, sources within a band in the
   // order they are drawn. One area means nothing to compare, which is the police exam.
@@ -107,16 +110,25 @@ export function AreaStandings({
             <Text style={[styles.name, { color: theme.text }]} numberOfLines={1}>
               {content.titleForSets([slug])}
             </Text>
-            {enough ? (
-              <Text style={[styles.share, { color: weak ? theme.bad : theme.muted }]}>
-                {/* The mark carries a shape as well as a colour — the same rule the quiz's
-                    verdicts follow, because a red and a grey number are one number under
-                    deuteranopia. */}
-                {weak ? '⚠ ' : ''}
-                {Math.round(share * 100)}%
-              </Text>
-            ) : null}
-            <Text style={[styles.count, { color: theme.muted }]}>
+            {/* Three columns of fixed width, not one string per row. The mark carries a shape
+                as well as a colour — a red and a grey number are one number under
+                deuteranopia, the same rule the quiz's verdicts follow — and it needs a column
+                of its own: inside the percentage it rode along with the digits, so "⚠ 0%" and
+                "⚠ 14%" put their marks in two different places. The percentage keeps its
+                column even when there are too few answers to show one, so the count below
+                doesn't slide left. */}
+            <Text style={[styles.mark, { color: theme.bad, width: 14 * fontScale }]}>
+              {weak ? '⚠' : ''}
+            </Text>
+            <Text
+              style={[
+                styles.share,
+                { color: weak ? theme.bad : theme.muted, width: 44 * fontScale },
+              ]}
+            >
+              {enough ? `${Math.round(share * 100)}%` : ''}
+            </Text>
+            <Text style={[styles.count, { color: theme.muted, width: 52 * fontScale }]}>
               {tally.correct}/{tally.seen}
             </Text>
           </Pressable>
@@ -132,6 +144,7 @@ const styles = StyleSheet.create({
   row: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 9 },
   pressed: { opacity: 0.65 },
   name: { flex: 1, fontSize: 14 },
-  share: { fontSize: 14, fontWeight: '600', minWidth: 62, textAlign: 'right' },
-  count: { fontSize: 13, minWidth: 52, textAlign: 'right' },
+  mark: { fontSize: 14 },
+  share: { fontSize: 14, fontWeight: '600', textAlign: 'right' },
+  count: { fontSize: 13, textAlign: 'right' },
 });
