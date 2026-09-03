@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import vm from 'node:vm';
 import { describe, it } from 'vitest';
 
 import { JUMP_DEADLINE_MS, JUMP_TICK_MS, jumpScript } from './jumpScript';
@@ -119,7 +120,9 @@ function landsOn(ref: string): string | null {
     __psJump: 0,
     __psJumpTouch: false,
   };
-  new Function('document', 'window', 'setTimeout', jumpScript(ref))(document, window, () => 0);
+  // The script is written for a WebView, so it is run the way one runs it: as source, in a
+  // context holding only what it may touch.
+  vm.runInNewContext(jumpScript(ref), { document, window, setTimeout: () => 0 });
   return hit;
 }
 
