@@ -6,12 +6,7 @@ import { useBottomInset } from '../../src/components/safeArea';
 import { Card, Muted } from '../../src/components/ui';
 import { category } from '../../src/content/categories';
 import { content } from '../../src/content/store';
-import {
-  type PracticeMode,
-  areaStandings,
-  examMistakesAmong,
-  loadCards,
-} from '../../src/db/database';
+import { type PracticeMode, areaStandings, loadCards } from '../../src/db/database';
 import { type Card as ProgressCard, createDeck, deckProgress } from '../../src/engine/leitner';
 import { examProfile } from '../../src/engine/exam';
 import { plural } from '../../src/engine/plural';
@@ -29,7 +24,9 @@ import { useTheme } from '../../src/theme';
  * side by side, and going on to answer questions is a choice rather than a side effect.
  *
  * Every row is state *and* the way in, which is why there are no buttons underneath: a row
- * that shows a number and leads nowhere would be the odd one out.
+ * that shows a number and leads nowhere would be the odd one out. A row says where it leads
+ * only when the label does not: the exam row goes to its own mistakes rather than to the
+ * area, so it names that, and the practice rows carry the bare arrow.
  */
 export default function AreaScreen() {
   const params = useLocalSearchParams<{ slug: string; profile?: string }>();
@@ -51,7 +48,8 @@ export default function AreaScreen() {
     .filter((title): title is string => title !== undefined);
 
   const [exam, setExam] = useState({ seen: 0, correct: 0, mistakes: 0 });
-  const [practice, setPractice] = useState<Record<PracticeMode, { mastered: number; untouched: number }>>({
+  type Tally = { mastered: number; untouched: number };
+  const [practice, setPractice] = useState<Record<PracticeMode, Tally>>({
     flashcards: { mastered: 0, untouched: 0 },
     test: { mastered: 0, untouched: 0 },
   });
@@ -62,14 +60,13 @@ export default function AreaScreen() {
 
       void (async () => {
         const standings = await areaStandings(profile.id);
-        const mistakes = await examMistakesAmong(profile.id, ids);
         const cards = await Promise.all(
           (['flashcards', 'test'] as PracticeMode[]).map((mode) => loadCards(ids, mode)),
         );
         if (cancelled) return;
 
-        const tally = standings.areas.get(slug) ?? { seen: 0, correct: 0 };
-        setExam({ seen: tally.seen, correct: tally.correct, mistakes: mistakes.length });
+        const tally = standings.areas.get(slug) ?? { seen: 0, correct: 0, missed: [] };
+        setExam({ seen: tally.seen, correct: tally.correct, mistakes: tally.missed.length });
         setPractice({
           flashcards: summarize(ids, cards[0], levels),
           test: summarize(ids, cards[1], levels),
@@ -143,24 +140,37 @@ function Row({
 }: {
   label: string;
   value: string;
-  /** What the tap does, when that isn't obvious from the label. */
+  /**
+   * What the tap does, when that isn't obvious from the label. Ignored on a row that
+   * leads nowhere.
+   */
   hint?: string;
   onPress?: () => void;
 }) {
   const theme = useTheme();
 
+  const leads = onPress !== undefined;
+
   return (
     <Pressable
       onPress={onPress}
-      disabled={!onPress}
-      accessibilityRole={onPress ? 'button' : undefined}
-      accessibilityLabel={`${label}: ${value}${hint ? `. ${hint}` : ''}`}
-      style={({ pressed }) => [styles.row, pressed && onPress && styles.pressed]}
+      disabled={!leads}
+      accessibilityRole={leads ? 'button' : undefined}
+      accessibilityLabel={`${label}: ${value}${leads && hint ? `. ${hint}` : ''}`}
+      style={({ pressed }) => [styles.row, pressed && leads && styles.pressed]}
     >
       <Text style={[styles.label, { color: theme.text }]}>{label}</Text>
       <View style={styles.values}>
-        <Text style={[styles.value, { color: theme.muted }]}>{value}</Text>
-        {hint ? <Text style={[styles.hint, { color: theme.accent }]}>{hint} →</Text> : null}
+        <Text style={[styles.value, { color: theme.muted }]}>
+          {value}
+          {/* The arrow marks the row as a way in, on every row that is one — the same
+              affordance the rest of the app uses. Without it the rows whose tap needs no
+              explaining looked like plain text next to the one that had a hint. */}
+          {leads && !hint ? <Text style={{ color: theme.accent }}>{'  →'}</Text> : null}
+        </Text>
+        {leads && hint ? (
+          <Text style={[styles.hint, { color: theme.accent }]}>{hint} →</Text>
+        ) : null}
       </View>
     </Pressable>
   );

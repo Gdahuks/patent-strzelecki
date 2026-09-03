@@ -9,6 +9,11 @@
 
 import * as SQLite from 'expo-sqlite';
 
+// The area lookup comes from the content bundle, and this is the safe direction of that
+// dependency: `src/content/` must never import `src/db/` (that would pull expo-sqlite into
+// tests that run without the app), while the reverse costs nothing — this module only ever
+// runs inside the app.
+import { content } from '../content/store';
 import { type AreaTally, type ExamProfileId, areaProgress, latestMisses } from '../engine/exam';
 import type { Card } from '../engine/leitner';
 
@@ -389,18 +394,16 @@ export async function missedQuestionIds(profile: ExamProfileId): Promise<string[
 }
 
 /**
- * Exam mistakes of one profile, narrowed to a given set of questions.
+ * The questions one subject area currently catches you on.
  *
- * Lives here rather than in `content/examPool` on purpose: anything importing `src/db/` pulls
- * in expo-sqlite, and `examPool` is read by a test that runs without the app.
+ * Reads the same tally the diagnosis shows, so the drill behind "powtórz N" is exactly the N
+ * questions that number counts. Deliberately **not** "this profile's mistakes that happen to
+ * belong to the area": that was the earlier rule, and since a paper draws each question from
+ * one area only, it answered a different question than the counter beside it.
  */
-export async function examMistakesAmong(
-  profile: ExamProfileId,
-  ids: readonly string[],
-): Promise<string[]> {
-  const within = new Set(ids);
-  const missed = await missedQuestionIds(profile);
-  return missed.filter((id) => within.has(id));
+export async function areaMistakes(profile: ExamProfileId, area: string): Promise<string[]> {
+  const { areas } = await areaStandings(profile);
+  return areas.get(area)?.missed ?? [];
 }
 
 export async function resetAllProgress(): Promise<void> {
@@ -435,16 +438,15 @@ export interface AttemptAnswer {
   chosen: 'A' | 'B' | 'C' | null;
   wasCorrect: boolean;
   critical: boolean;
-  /** Subject area the question was drawn from; absent on attempts saved before areas. */
-  category?: string;
 }
 
 /**
  * Per-area standing for one exam, plus how many attempts it rests on.
  *
  * Read through the same path as the mistake pool: this function does the reading, the rule
- * lives in `areaProgress` and is tested without a database. Only attempts that recorded their
- * areas are counted, so `attempts` is not the profile's whole history.
+ * lives in `areaProgress` and is tested without a database. **The whole history counts** —
+ * a question's area is derived from the content, so a paper drawn before the app knew about
+ * areas is as countable as today's.
  */
 export async function areaStandings(
   profile: ExamProfileId,
@@ -458,16 +460,16 @@ export async function areaStandings(
   const parsed: AttemptAnswer[][] = [];
   for (const row of rows) {
     try {
-      const answers = JSON.parse(row.answers) as AttemptAnswer[];
-      // An attempt from before the change carries no areas and would only inflate the count
-      // of attempts the numbers rest on.
-      if (answers.some((answer) => answer.category)) parsed.push(answers);
+      parsed.push(JSON.parse(row.answers) as AttemptAnswer[]);
     } catch {
       // A corrupted entry is skipped — the rest of the history is still useful.
     }
   }
 
-  return { attempts: parsed.length, areas: areaProgress(parsed) };
+  return {
+    attempts: parsed.length,
+    areas: areaProgress(parsed, (questionId) => content.areaOf(questionId)),
+  };
 }
 
 export interface AttemptDetail extends StoredAttempt {

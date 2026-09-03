@@ -448,7 +448,11 @@ function ExamSummary({
   const correct = result.answers.filter((answer) => answer.wasCorrect);
   /** Areas the mistakes came from, each named once. */
   const weakAreas = [
-    ...new Set(mistakes.map((answer) => answer.category).filter((slug): slug is string => !!slug)),
+    ...new Set(
+      mistakes
+        .map((answer) => content.areaOf(answer.questionId))
+        .filter((slug): slug is string => slug !== undefined),
+    ),
   ].map((slug) => content.titleForSets([slug]));
 
   // The summary replaces the screen without a navigation event, so a screen reader doesn't

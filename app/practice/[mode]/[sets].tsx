@@ -17,11 +17,12 @@ import { LawLink } from '../../../src/components/LawLink';
 import { positionLabel } from '../../../src/content/answers';
 import { useBottomInset } from '../../../src/components/safeArea';
 import { SegmentedBar } from '../../../src/components/ui';
+import { category } from '../../../src/content/categories';
 import { WEAK_SET_SLUG, content } from '../../../src/content/store';
 import type { Letter, Question } from '../../../src/content/types';
 import {
   type PracticeMode,
-  examMistakesAmong,
+  areaMistakes,
   loadCards,
   resetProgress,
   saveCard,
@@ -154,13 +155,13 @@ export default function ExerciseScreen() {
       const whole = isWeak
         ? content.questionsByIds(await weakQuestionIds(mode))
         : content.questionsForSets(setSlugs);
-      const pool = examProfileId
-        ? content.questionsByIds(
-            await examMistakesAmong(
-              examProfile(examProfileId).id,
-              whole.map((question) => question.id),
-            ),
-          )
+      // The parameter narrows an *area* to what its exams caught you on, so it is honoured
+      // only on an area route — the counter promising those questions lives on the area
+      // screen, and this has to be the same list. On a course set the parameter means
+      // nothing and the whole set is shown.
+      const area = setSlugs.length === 1 ? category(setSlugs[0]) : undefined;
+      const pool = examProfileId && area
+        ? content.questionsByIds(await areaMistakes(examProfile(examProfileId).id, area.slug))
         : whole;
       if (cancelled) return;
 

@@ -79,7 +79,7 @@ export function AreaStandings({
       </View>
 
       {slugs.map((slug, index) => {
-        const tally = areas.get(slug) ?? { seen: 0, correct: 0 };
+        const tally = areas.get(slug) ?? { seen: 0, correct: 0, missed: [] };
         const share = tally.seen > 0 ? tally.correct / tally.seen : 0;
         const enough = tally.seen >= MIN_ANSWERS;
         const critical = criticals.includes(slug);

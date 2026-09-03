@@ -149,15 +149,6 @@ export interface ExamQuestion {
   /** Display order of the answers — shuffled so positions can't be memorized. */
   order: Letter[];
   critical: boolean;
-  /**
-   * The area this slot was drawn from.
-   *
-   * Recorded rather than derived, because 43 questions belong to two areas at once — the
-   * Act's own penal provisions sit in both the first and the fifth. Deriving it later would
-   * point a mistake at whichever area matched first, and the diagnosis would count those
-   * questions twice.
-   */
-  category: string;
 }
 
 export interface ExamAnswer {
@@ -165,13 +156,6 @@ export interface ExamAnswer {
   chosen: Letter | null;
   wasCorrect: boolean;
   critical: boolean;
-  /**
-   * The area the question was drawn from — see `ExamQuestion.category`.
-   *
-   * Optional because attempts saved before the paper had areas carry no such field, and those
-   * rows still have to open. Anything reading it has to cope with its absence.
-   */
-  category?: string;
 }
 
 export interface ExamResult {
@@ -260,11 +244,12 @@ export function latestMisses(
  * The preferred questions stay in their layer in full, so the exam still focuses on what you
  * don't know.
  *
- * Top-ups deliberately ignore questions already pooled for an earlier layer. Layers are not
- * disjoint — 43 questions are penal provisions of the Act itself, so they belong to both the
- * first area and the fifth — and the draw dedupes across the whole paper. Counting only
- * questions no earlier layer can take away is what guarantees every layer still has enough
- * once the shared ones are gone.
+ * Top-ups also ignore questions already pooled for an earlier layer, and that is deliberate
+ * even though the app's own areas are a **partition** — with one area per question, this
+ * subtracts nothing today (`categories.package.test` is what holds that). It stays because
+ * nothing in this function's signature says the pools are disjoint, the test that holds the
+ * partition **skips itself when the content bundle is absent**, and the failure it prevents is
+ * the nastiest kind: the draw succeeding or refusing depending on the seed.
  *
  * @param fallbackLayers each layer's full pool, in profile order
  */
@@ -272,6 +257,15 @@ export function latestMisses(
 export interface AreaTally {
   seen: number;
   correct: number;
+  /**
+   * The questions behind `seen - correct`, i.e. the ones this area currently catches you on.
+   *
+   * Returned alongside the counts rather than gathered by a second function, and that is the
+   * point: "asked 11, 2 correct, repeat 16" was on screen because the count and the drill came
+   * from two different definitions of the area. Both now come from this one pass, so
+   * `missed.length === seen - correct` holds by construction.
+   */
+  missed: string[];
 }
 
 /**
@@ -284,31 +278,39 @@ export interface AreaTally {
  * questions can show "23/24" off six questions answered four times each, which reads as
  * mastery of the area and isn't.
  *
- * `seen` is therefore also a coverage figure — "34/41" against an area of 295 questions says
+ * `seen` is therefore also a coverage figure — "34/41" against an area of 252 questions says
  * plainly that most of it hasn't been asked yet.
  *
- * Answers with no recorded area are skipped: those come from attempts saved before the paper
- * was composed from areas, and the alternative — deriving the area from set membership — would
- * count the Act's own penal provisions in two areas at once, which is exactly what recording
- * the area avoids.
+ * The area comes from the resolver, never from the attempt: areas are a partition of the
+ * content (`content.areaOf`), so **every** attempt can be counted — including papers taken
+ * before the app composed them by area. A question in no area at all, which is every question
+ * of the police (WPA) list, is counted nowhere; those papers contribute what belongs to an
+ * area and nothing else.
+ *
+ * The resolver is a parameter because this file may not import the content bundle.
  *
  * @param attempts answers from past attempts, most recent first
+ * @param areaOf the area a question belongs to, if any
  */
 export function areaProgress(
-  attempts: readonly (readonly ExamAnswer[])[],
+  attempts: readonly (readonly { questionId: string; wasCorrect: boolean }[])[],
+  areaOf: (questionId: string) => string | undefined,
 ): Map<string, AreaTally> {
   const tally = new Map<string, AreaTally>();
   const settled = new Set<string>();
 
   for (const attempt of attempts) {
     for (const answer of attempt) {
-      if (!answer.category || settled.has(answer.questionId)) continue;
+      if (settled.has(answer.questionId)) continue;
+      const area = areaOf(answer.questionId);
+      if (!area) continue;
       settled.add(answer.questionId);
 
-      const entry = tally.get(answer.category) ?? { seen: 0, correct: 0 };
+      const entry = tally.get(area) ?? { seen: 0, correct: 0, missed: [] };
       entry.seen += 1;
       if (answer.wasCorrect) entry.correct += 1;
-      tally.set(answer.category, entry);
+      else entry.missed.push(answer.questionId);
+      tally.set(area, entry);
     }
   }
 
@@ -374,11 +376,6 @@ export function buildPool(
   });
 }
 
-/** A question with the area it was drawn from, before the paper's order is settled. */
-interface Drawn {
-  question: Question;
-  category: string;
-}
 
 /**
  * Which source of a band fills the next slot, or `null` when the band has run dry.
@@ -432,12 +429,12 @@ export function drawExam(
   profile: ExamProfile,
   random: () => number = Math.random,
 ): ExamQuestion[] {
-  const critical: Drawn[] = [];
-  const rest: Drawn[] = [];
+  const critical: { question: Question }[] = [];
+  const rest: { question: Question }[] = [];
   const taken = new Set<string>();
 
   profile.layers.forEach((layer, bandIndex) => {
-    // Bands overlap, so what's already on the paper is off the table — otherwise a question
+    // What's already on the paper is off the table — otherwise a question
     // that is both a provision of the Act and a penal one could be asked twice. The same pass
     // drops repeats **inside** a pool: two copies of one question would otherwise both survive
     // into the paper, and grading reads answers by question id, so a single answer would count
@@ -450,7 +447,7 @@ export function drawExam(
       return shuffle([...unique.values()], random);
     });
     const filled = layer.sources.map(() => 0);
-    const drawn: Drawn[] = [];
+    const drawn: { question: Question }[] = [];
 
     for (let slot = 0; slot < layer.count; slot += 1) {
       const source = pickSource(layer, pools, filled, random());
@@ -468,7 +465,7 @@ export function drawExam(
       if (!question) throw new Error('pickSource wskazał puste źródło');
       filled[source] += 1;
       taken.add(question.id);
-      drawn.push({ question, category: layer.sources[source].category });
+      drawn.push({ question });
     }
 
     (layer.critical ? critical : rest).push(...drawn);
@@ -485,7 +482,6 @@ export function drawExam(
     question: entry.question,
     order: shuffle(Object.keys(entry.question.answers) as Letter[], random),
     critical: index < critical.length,
-    category: entry.category,
   }));
 }
 
@@ -501,7 +497,6 @@ export function gradeExam(
       chosen: pick,
       wasCorrect: pick === entry.question.correct,
       critical: entry.critical,
-      category: entry.category,
     };
   });
 

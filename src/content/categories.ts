@@ -9,6 +9,19 @@
  * The table is deliberately import-free: the exam engine reads it through `examPool`, the
  * store resolves an area's slug to questions, and neither may end up importing the other.
  *
+ * **The areas are a partition: every question belongs to exactly one of them, or to none.**
+ * That is the whole model — a question's area is a function of the content, computed once from
+ * the course's own sets, never stored anywhere. Both things the app does with areas therefore
+ * agree by construction: the paper draws each slot from one area's questions, and the diagnosis
+ * counts each answer in one area's row.
+ *
+ * Where the course files a question in two areas, the narrower one owns it — see `general`.
+ * The alternative, counting such a question in both rows, was tried and is wrong: with the
+ * paper drawing it from one area only, the other area's row would report results for a group
+ * the question never appeared in. Someone who answers every question of the opening four
+ * correctly, and misses the same questions in the fifth area, would read a failing critical
+ * row.
+ *
  * Each area is a sum of the course's own question sets. We do not classify the course's
  * content question by question — that would mean maintaining our own taxonomy of someone
  * else's material through every content refresh. The price of the cheap route shows in one
@@ -31,6 +44,20 @@ export interface Category {
   /** Course sets the area is assembled from. */
   setSlugs: readonly string[];
   /**
+   * Whether this area yields a question to any other area that also claims it.
+   *
+   * Exactly one area carries this, and it is the Act — the course files 43 questions in both
+   * "UoBiA" and "Prawo karne": all of the Act's own sanctions, art. 51 (wykroczenia) and
+   * art. 18 ust. 5 (cofnięcie pozwolenia). The narrower area wins them, and here that
+   * direction is forced rather than chosen: the course's "Prawo karne" set holds 49 questions
+   * of which those 43 *are* the substance, so leaving them under the Act would leave the fifth
+   * area 17 questions to fill two slots on every paper — the same handful over and over.
+   *
+   * A flag rather than a list of 43 ids: the rule survives a content refresh, an exception
+   * list would need maintaining against someone else's material.
+   */
+  general?: true;
+  /**
    * Whether questions belonging to no thematic set land here.
    *
    * Exactly one area carries this. 55 questions in the bundle belong to no set other than
@@ -46,7 +73,7 @@ export interface Category {
    * § 19 ust. 1 — the stamp duty on a promesa, and a registration deadline falling on a
    * Saturday — but excluding them would buy a tidier label at the price of a rule to maintain
    * and a judgement call that is ours to make and shouldn't be. Three questions in a pool of
-   * 295 change nothing about the paper, and this way every question the course teaches stays
+   * 252 change nothing about the paper, and this way every question the course teaches stays
    * reachable in an exam.
    */
   includeUnassigned?: true;
@@ -58,6 +85,9 @@ export const CATEGORIES: readonly Category[] = [
     title: 'UoBiA i przepisy wykonawcze',
     setSlugs: ['uobia', 'rozp-noszenie', 'rozp-transport'],
     includeUnassigned: true,
+    // The Act is the general area: it covers the statute as a whole, so a question the course
+    // also files under a narrower subject belongs there instead. See `general`.
+    general: true,
   },
   {
     slug: 'zg-bezpieczenstwo',

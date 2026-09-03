@@ -6,6 +6,7 @@ import { describe, it } from 'vitest';
 
 import { ALL_SET_SLUG, CATEGORIES } from './categories';
 import { profileAvailable, profileBands } from './examPool';
+import { content as store } from './store';
 import type { ContentBundle } from './types';
 import { PATENT_PROFILE, WPA_PROFILE } from '../engine/exam';
 
@@ -44,8 +45,8 @@ describe.skipIf(!PRESENT)('subject areas on the real bundle', () => {
     .map((question) => question.id);
   const wpa = idsOf([WPA_SET_SLUG], content.sets);
 
-  /** Which areas a question falls into, the unassigned rule included. */
-  function areasOf(id: string): string[] {
+  /** Areas whose *sets* claim a question, before the general area yields it. */
+  function claimedBy(id: string): string[] {
     return CATEGORIES.filter((category) => {
       if (idsOf(category.setSlugs, content.sets).has(id)) return true;
       return category.includeUnassigned === true && unassigned.includes(id);
@@ -56,38 +57,85 @@ describe.skipIf(!PRESENT)('subject areas on the real bundle', () => {
     // The one that would break silently: a question in no area is a question the paper can
     // never ask, and nothing on screen would say so.
     const orphans = content.questions
-      .filter((question) => !wpa.has(question.id) && areasOf(question.id).length === 0)
+      .filter((question) => !wpa.has(question.id) && store.areaOf(question.id) === undefined)
       .map((question) => question.id);
 
     assert.deepEqual(orphans, []);
   });
 
-  it('overlaps only where the Act carries its own penal provisions', () => {
-    // Two areas on purpose — those questions really are both. Any *other* overlap means the
-    // course regrouped its sets and the map needs revisiting.
-    const overlapping = content.questions
-      .map((question) => areasOf(question.id))
-      .filter((areas) => areas.length > 1);
-
-    for (const areas of overlapping) {
-      assert.deepEqual([...areas].sort(), ['zg-prawo-karne', 'zg-uobia']);
+  it('gives every question exactly one area', () => {
+    // The partition is the whole model: the paper draws a slot from one area and the
+    // diagnosis counts the answer in one row, so those two can never disagree. Asserted
+    // against the resolution the app actually uses, not against a copy of the rule.
+    for (const question of content.questions) {
+      const area = store.areaOf(question.id);
+      if (area === undefined) continue;
+      assert.equal(
+        store.questionsForSets([area]).some((entry) => entry.id === question.id),
+        true,
+        question.id,
+      );
+      const others = CATEGORIES.filter(
+        (category) =>
+          category.slug !== area
+          && store.questionsForSets([category.slug]).some((entry) => entry.id === question.id),
+      );
+      assert.deepEqual(others, [], question.id);
     }
-    assert.equal(overlapping.length, 43);
+  });
+
+  it('resolves the double-filed questions in favour of the narrower area', () => {
+    // The course files the Act's own sanctions — art. 51 and art. 18 ust. 5 — under both
+    // "UoBiA" and "Prawo karne". Any *other* pair of sets claiming the same question means
+    // the course regrouped and the map needs revisiting, since the general flag would then be
+    // silently deciding something nobody looked at.
+    const contested = content.questions
+      .map((question) => ({ id: question.id, areas: claimedBy(question.id) }))
+      .filter((entry) => entry.areas.length > 1);
+
+    for (const entry of contested) {
+      assert.deepEqual([...entry.areas].sort(), ['zg-prawo-karne', 'zg-uobia'], entry.id);
+      assert.equal(store.areaOf(entry.id), 'zg-prawo-karne', entry.id);
+    }
+    assert.equal(contested.length, 43);
   });
 
   it('keeps the police set out of the licence exam', () => {
     for (const id of wpa) {
-      assert.deepEqual(areasOf(id), [], id);
+      assert.equal(store.areaOf(id), undefined, id);
     }
   });
 
   it('accounts for every question in the bundle', () => {
-    // The two numbers are the point: they are frozen on purpose, so that a refreshed content
-    // bundle stops the build instead of quietly changing what the exam asks about.
-    const inAreas = content.questions.filter((question) => areasOf(question.id).length > 0);
+    // The numbers are frozen on purpose, so that a refreshed content bundle stops the build
+    // instead of quietly changing what the exam asks about. They also have to add up: the
+    // areas partition the licence pool, so their sizes sum to it exactly.
     const advice = 'paczka treści odświeżona? sprawdź CATEGORIES i liczby w tym teście';
+    const sizes = new Map(
+      CATEGORIES.map((category) => [category.slug, store.questionsForSets([category.slug]).length]),
+    );
 
+    assert.deepEqual(
+      [...sizes],
+      [
+        ['zg-uobia', 252],
+        ['zg-bezpieczenstwo', 24],
+        ['zg-regulaminy', 36],
+        ['zg-budowa', 84],
+        ['zg-prawo-karne', 60],
+      ],
+      advice,
+    );
+
+    const inAreas = content.questions.filter(
+      (question) => store.areaOf(question.id) !== undefined,
+    );
     assert.equal(inAreas.length, 456, `pula patentowa: ${inAreas.length} — ${advice}`);
+    assert.equal(
+      [...sizes.values()].reduce((sum, size) => sum + size, 0),
+      inAreas.length,
+      'suma zagadnień musi się równać puli — inaczej zagadnienia nie są rozłączne',
+    );
     assert.equal(wpa.size, 200, `zestaw wpa: ${wpa.size} — ${advice}`);
   });
 

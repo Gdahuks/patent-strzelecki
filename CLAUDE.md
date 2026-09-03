@@ -370,9 +370,10 @@ catches, leaving the attempt screen on its spinner for good. Hence also the `try
 composing the paper in `app/exam/attempt.tsx` — and `profileAvailable` checking each area on
 its own rather than the pool's total size, which says nothing.
 
-The top-up skips questions already pooled for an earlier area: since the areas overlap and the
-draw dedupes across the paper, counting only questions no earlier area can take away is what
-keeps the last area from coming out one question short.
+The top-up also skips questions already pooled for an earlier area. The areas are a partition,
+so that subtracts nothing today — it stays because nothing in the function's signature says the
+pools are disjoint, the test that holds the partition skips itself without a content bundle, and
+the failure it prevents is the draw succeeding or refusing depending on the seed.
 
 **Search matches from the start of a word, not anywhere inside it.** A plain `includes` made
 "bron" (gun) match inside "obrona" (defence). `findAtWordStart` gets the same effect without a
@@ -529,9 +530,11 @@ mock exam flat from all 656 questions, which is why a paper there was ~3.4 quest
 police (WPA) list, 0.45 from the safety rules and 0.33 from the range regulations — and why 79%
 of papers had no safety question in the group where a single mistake fails you. The course
 describes the 2×5 rule on its own page and doesn't implement it; the app does, bar the opening
-four. The areas are sums of the course's own sets, declared in `src/content/categories.ts`, and
-they are **not disjoint** — 43 questions are penal provisions of the Act itself, so they belong
-to two areas and the draw dedupes within the paper. Their user-facing names follow what is
+four. The areas are sums of the course's own sets, declared in `src/content/categories.ts`,
+and they are a **partition**: every question belongs to exactly one area, or to none (the 200 police-exam
+questions). Where the course files a question in two — 43 questions are the Act's own sanctions,
+art. 51 and art. 18 ust. 5, filed under both "UoBiA" and "Prawo karne" — the narrower area wins
+it, which is what the `general` flag on area 1 means. Their user-facing names follow what is
 inside rather than the regulation's wording, and the reason is written down next to each one.
 
 **The exam screen carries the per-area standing, and that is where the areas belong.** They
@@ -539,9 +542,18 @@ answer "what am I worst at", which is diagnosis, not browsing — a second switc
 practice list was built and removed. The tally counts **distinct questions by their latest
 verdict**, the same rule as the mistake pool, so it heals when someone improves and can't be
 inflated by repeats; `seen` doubles as coverage. Weak areas are marked against a threshold
-(higher for the opening four), never ranked. An answer records the area it was drawn from —
-deriving it later would point a mistake at whichever area matched first and count the
-overlapping 43 twice.
+(higher for the opening four), never ranked.
+
+**Nothing about areas is stored on an answer: the area is derived from the question**
+(`content.areaOf`). An earlier version recorded it at draw time, and that one denormalisation
+produced three defects at once — the counter and the drill beside it came from two different
+definitions of "this area's questions" ("pytano o 11" next to "powtórz 16"), attempts saved
+before the change could not be counted at all, and the same question was critical in one paper
+and not in the next. Counting a double-filed question in both rows is not the fix either: with
+the paper drawing it from one area only, the other row would report on a group the question
+never appeared in — someone could answer every critical question correctly and still read a
+failing critical row. The partition is what makes the paper and the numbers about it agree by
+construction, and `categories.package.test.ts` is what holds it against a content refresh.
 
 The design, the numbers behind it, and what is still unresolved (whether real papers open with
 2+2 or 4 questions from the Act) are written up in the scraper repo, alongside the other specs.

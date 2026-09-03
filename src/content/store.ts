@@ -7,7 +7,8 @@
  * relative image paths to resolve against.
  */
 
-import { ALL_SET_SLUG, category } from './categories';
+import { ALL_SET_SLUG, CATEGORIES, category } from './categories';
+import type { Category } from './categories';
 import type { ContentBundle, Lesson, Question, QuestionSet } from './types';
 
 /**
@@ -39,6 +40,56 @@ const unassignedIds: string[] = (() => {
     .map((question) => question.id);
 })();
 
+/** Ids an area claims from the course's sets, before the narrower area gets its say. */
+function claimedBy(entry: Category): Set<string> {
+  const ids = new Set(
+    entry.setSlugs.flatMap((setSlug) => setsBySlug.get(setSlug)?.questionIds ?? []),
+  );
+  if (entry.includeUnassigned) for (const id of unassignedIds) ids.add(id);
+  return ids;
+}
+
+/**
+ * The one area each question belongs to — the single source of that fact in the app.
+ *
+ * Areas are a partition (see `categories.ts`), and this map is what makes them one: a narrower
+ * area takes a question the general area also claims. Everything about areas is read from
+ * here — the pools the paper is drawn from, the rows of the diagnosis, the questions behind an
+ * area's flashcards — so the paper and the numbers about it cannot drift apart.
+ *
+ * The 200 WPA questions are in no area at all; the map simply has no entry for them.
+ */
+const areaByQuestion: Map<string, string> = (() => {
+  const areas = new Map<string, string>();
+  const general = CATEGORIES.filter((entry) => entry.general);
+
+  for (const entry of CATEGORIES) {
+    if (entry.general) continue;
+    for (const id of claimedBy(entry)) areas.set(id, entry.slug);
+  }
+  for (const entry of general) {
+    for (const id of claimedBy(entry)) if (!areas.has(id)) areas.set(id, entry.slug);
+  }
+  return areas;
+})();
+
+/**
+ * Each area's questions, in bundle order.
+ *
+ * Built from `areaByQuestion` rather than from the sets, so an area's list is exactly the
+ * questions the area owns. Bundle order, not set order: it is stable across content refreshes
+ * of the sets themselves, and nothing downstream depends on the old order — the practice deck
+ * orders by bucket and the exam draws at random.
+ */
+const idsByArea: Map<string, string[]> = (() => {
+  const lists = new Map<string, string[]>(CATEGORIES.map((entry) => [entry.slug, []]));
+  for (const question of bundle.questions) {
+    const area = areaByQuestion.get(question.id);
+    if (area) lists.get(area)?.push(question.id);
+  }
+  return lists;
+})();
+
 /**
  * Question ids behind a slug, which may name either a course set or one of our categories.
  *
@@ -48,9 +99,7 @@ const unassignedIds: string[] = (() => {
 function idsForSlug(slug: string): string[] {
   const entry = category(slug);
   if (!entry) return setsBySlug.get(slug)?.questionIds ?? [];
-
-  const ids = entry.setSlugs.flatMap((setSlug) => setsBySlug.get(setSlug)?.questionIds ?? []);
-  return entry.includeUnassigned ? [...ids, ...unassignedIds] : ids;
+  return idsByArea.get(entry.slug) ?? [];
 }
 
 export const content = {
@@ -109,6 +158,18 @@ export const content = {
     return ids
       .map((id) => questionsById.get(id))
       .filter((question): question is Question => question !== undefined);
+  },
+
+  /**
+   * The subject area a question belongs to, or undefined when it belongs to none.
+   *
+   * The exam records nothing about areas on an answer: this is derivable from the question
+   * alone, so storing it would be a second copy of the same fact — and it was one, until the
+   * copy started disagreeing with this. Deriving it also means the whole attempt history
+   * counts, including papers taken before the areas existed.
+   */
+  areaOf(questionId: string): string | undefined {
+    return areaByQuestion.get(questionId);
   },
 
   /** A set's title — for practice screen headers. */
