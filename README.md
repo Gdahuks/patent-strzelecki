@@ -46,10 +46,11 @@ Co robi aplikacja:
 - **Ćwiczenia** — fiszki i test ABC z osobnym postępem (powtórki Leitnera, liczba poziomów
   do ustawienia), do wyboru w podziale na pięć zagadnień egzaminu albo na zestawy kursu,
   zestaw „moje błędy", przegląd wszystkich pytań zestawu z podziałem na stany i ręczną korektą.
-- **Egzamin** — 10 pytań, 20 minut, próg 9/10, po dwa pytania z każdego z pięciu zagadnień
-  zgodnie z § 19 regulaminu patentowego PZSS, z czwórką pytań krytycznych z ustawy i zasad
-  bezpieczeństwa; historia podejść i egzamin z puli własnych pomyłek. Osobno egzamin przed
-  komisją WPA na zasadach z § 4 rozporządzenia o egzaminie.
+- **Egzamin** — 10 pytań, 20 minut, próg 9/10; arkusz składany po zagadnieniach § 19 regulaminu
+  patentowego PZSS: cztery pytania z ustawy i zasad bezpieczeństwa bez prawa błędu, dalej po dwa
+  z pozostałych trzech zagadnień. Do tego wyniki po zagadnieniach liczone z własnych podejść,
+  historia i egzamin z puli własnych pomyłek. Osobno egzamin przed komisją WPA na zasadach z § 4
+  rozporządzenia o egzaminie.
 - **Akty prawne** — czytanie całych ustaw offline, spis jednostek, skoki z podstaw prawnych
   pytań, przypisy jako dymki.
 - **Szukanie** — po pytaniach, lekcjach i tekstach ustaw, z przejściem w konkretne miejsce.

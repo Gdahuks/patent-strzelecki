@@ -507,21 +507,41 @@ running.
 
 ## Exam rules (from § 19 of the PZSS regulation, not from the course)
 
-10 questions, 20 minutes, a 9/10 pass mark, and **two questions from each of five subject
-areas** — the Act and its regulations, safety rules, range/sport regulations, firearm
-construction and technical data, penal law. The first 4 questions are the two from the Act and
-the two safety ones, and they **must all be correct**: a mistake there fails the exam
-regardless of the overall score. Question order and answer order are both shuffled, inside the
-critical four as well.
+10 questions, 20 minutes, a 9/10 pass mark. The paper opens with **four questions from the Act
+and the safety rules** that must all be correct — a mistake there fails the exam regardless of
+the overall score — and continues with **two questions from each of the three remaining areas**:
+range regulations, firearm construction with the ISSF rules, and penal law. Question order and
+answer order are both shuffled, inside the opening four as well.
+
+**How many of the opening four are about safety is deliberately random: none, one or two.**
+§ 19 ust. 1 asks for two questions from each of five areas, which would fix that group at
+2 + 2 — and half of it then comes from a 24-question pool anyone learns by heart, so the mock
+would pass far more readily than a real paper drawn the other way. We don't know how a
+committee fills it: the regulation implies 2 + 2, PZSS's own published question list falls into
+four topical blocks rather than five, and the only eyewitness account describes four questions
+from the Act. So the group is one band with the safety rules weighted at 25% a slot and capped
+at two — 31.6% of papers get none, 42.2% one, 26.2% two. The cap is not a fudge: no reading of
+a real paper produces three. Going back to the regulation's letter is two numbers in
+`PATENT_PROFILE` (`share: 0.5` and `max: 2` become a second band of `count: 2`).
 
 **The composition comes from the regulation, not from the course's quiz.** The course draws its
 mock exam flat from all 656 questions, which is why a paper there was ~3.4 questions from the
 police (WPA) list, 0.45 from the safety rules and 0.33 from the range regulations — and why 79%
 of papers had no safety question in the group where a single mistake fails you. The course
-describes the 2×5 rule on its own page and doesn't implement it; the app does. The areas are
-sums of the course's own sets, declared in `src/content/categories.ts`, and they are **not
-disjoint** — 43 questions are penal provisions of the Act itself, so they belong to two areas
-and the draw dedupes within the paper.
+describes the 2×5 rule on its own page and doesn't implement it; the app does, bar the opening
+four. The areas are sums of the course's own sets, declared in `src/content/categories.ts`, and
+they are **not disjoint** — 43 questions are penal provisions of the Act itself, so they belong
+to two areas and the draw dedupes within the paper. Their user-facing names follow what is
+inside rather than the regulation's wording, and the reason is written down next to each one.
+
+**The exam screen carries the per-area standing, and that is where the areas belong.** They
+answer "what am I worst at", which is diagnosis, not browsing — a second switch over the
+practice list was built and removed. The tally counts **distinct questions by their latest
+verdict**, the same rule as the mistake pool, so it heals when someone improves and can't be
+inflated by repeats; `seen` doubles as coverage. Weak areas are marked against a threshold
+(higher for the opening four), never ranked. An answer records the area it was drawn from —
+deriving it later would point a mistake at whichever area matched first and count the
+overlapping 43 twice.
 
 The design, the numbers behind it, and what is still unresolved (whether real papers open with
 2+2 or 4 questions from the Act) are written up in the scraper repo, alongside the other specs.
