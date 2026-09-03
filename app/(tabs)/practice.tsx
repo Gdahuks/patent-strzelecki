@@ -46,7 +46,7 @@ const MODES: { key: PracticeMode; label: string }[] = [
  * in two, and two of the five areas are literally single course sets, so the list showed the
  * same rows twice under different names. The areas answer a different question — "what am I
  * worst at" — which is diagnosis, not browsing, so they live on the exam screen, where the
- * answer comes from actual attempts, and a tap there opens the ABC quiz for that area. This
+ * answer comes from actual attempts, and a tap there opens that area's own screen. This
  * list stays what it is: the course's own sets, in the course's own words, for the phase when
  * someone is reading the lessons.
  */

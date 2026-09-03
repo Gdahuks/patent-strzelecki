@@ -40,10 +40,19 @@ const unassignedIds: string[] = (() => {
     .map((question) => question.id);
 })();
 
-/** Ids an area claims from the course's sets, before the narrower area gets its say. */
+/**
+ * Ids an area claims from the course's sets, before the narrower area gets its say.
+ *
+ * Only ids that are actually questions in this bundle. A set naming a question the bundle
+ * doesn't carry would otherwise get an area, be counted in `seen` and land in `missed` — and
+ * then vanish when the drill turns ids back into questions, leaving "Powtórz 3" over two
+ * cards.
+ */
 function claimedBy(entry: Category): Set<string> {
   const ids = new Set(
-    entry.setSlugs.flatMap((setSlug) => setsBySlug.get(setSlug)?.questionIds ?? []),
+    entry.setSlugs
+      .flatMap((setSlug) => setsBySlug.get(setSlug)?.questionIds ?? [])
+      .filter((id) => questionsById.has(id)),
   );
   if (entry.includeUnassigned) for (const id of unassignedIds) ids.add(id);
   return ids;

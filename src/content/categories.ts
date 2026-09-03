@@ -35,9 +35,9 @@
 /** One subject area of the exam, and one row of the diagnosis on the exam screen. */
 export interface Category {
   /**
-   * Slug used both as a route parameter (`/practice/test/<slug>`, which is how the diagnosis
-   * opens an area's quiz) and as a source reference in the exam profile. Prefixed so it can
-   * never collide with a course set slug.
+   * Slug used both as a route parameter — `/area/<slug>`, where the diagnosis leads, and
+   * `/practice/<mode>/<slug>` from there — and as a source reference in the exam profile.
+   * Prefixed so it can never collide with a course set slug.
    */
   slug: string;
   title: string;

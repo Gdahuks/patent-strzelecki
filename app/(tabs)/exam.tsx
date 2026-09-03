@@ -82,12 +82,29 @@ export default function EgzaminScreen() {
 
   const pool = useMemo(() => profileQuestions(profile), [profile]);
 
+  /**
+   * Three reads, dropped if the screen moves on before they land.
+   *
+   * Without the flag a late read from the previous profile can overwrite the new one's state —
+   * the same hazard `onSelectProfile` clears the screen for, one step further along: switching
+   * profile twice quickly would land a stale table of areas under the current heading.
+   */
   const refresh = useCallback(() => {
-    void recentAttempts(profile.id).then(setAttempts);
-    void missedQuestionIds(profile.id).then((ids) =>
-      setMissedCount(profileMisses(ids, pool).length),
-    );
-    void areaStandings(profile.id).then(setStandings);
+    let cancelled = false;
+
+    void recentAttempts(profile.id).then((rows) => {
+      if (!cancelled) setAttempts(rows);
+    });
+    void missedQuestionIds(profile.id).then((ids) => {
+      if (!cancelled) setMissedCount(profileMisses(ids, pool).length);
+    });
+    void areaStandings(profile.id).then((read) => {
+      if (!cancelled) setStandings(read);
+    });
+
+    return () => {
+      cancelled = true;
+    };
   }, [profile, pool]);
 
   useFocusEffect(refresh);
@@ -153,6 +170,10 @@ export default function EgzaminScreen() {
   const passed = (attempts ?? []).filter((attempt) => attempt.passed).length;
   const minutes = profile.timeLimitSeconds / 60;
   const criticals = criticalCount(profile);
+  // How many of the opening four can be about safety, read off the profile rather than typed
+  // into the sentence: going back to the regulation's 2+2 is a change of these numbers, and a
+  // hardcoded range would then describe an exam the app no longer sets.
+  const safetyCap = profile.layers[0]?.sources[1]?.max ?? criticals;
 
   return (
     <ScrollView contentContainerStyle={styles.body}>
@@ -174,8 +195,8 @@ export default function EgzaminScreen() {
         {criticals > 0 ? (
           <Muted>
             Pierwsze {criticals} pytania — z UoBiA i zasad bezpieczeństwa — muszą być bezbłędne;
-            ile z nich jest o bezpieczeństwie, jest losowe (0–2). Dalej po dwa pytania
-            z pozostałych trzech zagadnień.
+            ile z nich jest o bezpieczeństwie, jest losowe (0–{safetyCap}). Dalej po dwa
+            pytania z pozostałych trzech zagadnień.
           </Muted>
         ) : (
           <Muted>
@@ -225,7 +246,12 @@ export default function EgzaminScreen() {
         <Text style={[styles.sectionTitle, { color: theme.text }]}>Historia</Text>
         {attempts && attempts.length > 0 ? (
           <Muted>
-            {passed} {plural(passed, 'zdane', 'zdane', 'zdanych')} z {attempts.length}
+            {/* „z ostatnich 20" once the list is capped: the card above counts the whole
+                history, so a bare „z 20" under „z 25 podejść" reads as one of them being
+                wrong. */}
+            {passed} {plural(passed, 'zdane', 'zdane', 'zdanych')} z
+            {standings.attempts > attempts.length ? ' ostatnich ' : ' '}
+            {attempts.length}
           </Muted>
         ) : null}
       </View>

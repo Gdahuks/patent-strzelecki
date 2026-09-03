@@ -35,6 +35,7 @@ import {
   examProfile,
   formatRemaining,
   gradeExam,
+  profileAreas,
   solvingTime,
   unansweredNumbers,
 } from '../../src/engine/exam';
@@ -292,6 +293,7 @@ export default function ExamAttemptScreen() {
       <ExamSummary
         result={result}
         profile={profile}
+        fromWeak={fromWeak}
         elapsed={finishedAt.current - startedAt.current}
         onClose={() => router.back()}
       />
@@ -433,11 +435,14 @@ export default function ExamAttemptScreen() {
 function ExamSummary({
   result,
   profile,
+  fromWeak,
   elapsed,
   onClose,
 }: {
   result: ExamResult;
   profile: ExamProfile;
+  /** Whether the paper was built from the mistake pool rather than drawn from the areas. */
+  fromWeak: boolean;
   /** Milliseconds the attempt took. */
   elapsed: number;
   onClose: () => void;
@@ -489,11 +494,16 @@ function ExamSummary({
             ale błąd padł w pierwszych {criticalCount(profile)} pytaniach — to oznacza niezdanie.
           </Text>
         ) : null}
-        {result.passed ? <Muted>Taki wynik zalicza prawdziwy egzamin.</Muted> : null}
+        {/* Only about a paper drawn the way a real one is. An exam from the mistake pool
+            re-asks questions whose answers were on screen in the last summary, so the same
+            sentence there would promise something this result cannot support. */}
+        {result.passed && !fromWeak ? <Muted>Taki wynik zalicza prawdziwy egzamin.</Muted> : null}
         {/* Which areas the mistakes fell in — one line, not a link on every card. The card
             already carries the lesson and the legal basis, and the exam screen's own table of
             areas is one tap away with more context than a single paper can give. */}
-        {weakAreas.length > 0 ? <Muted>Błędy w zagadnieniach: {weakAreas.join(', ')}.</Muted> : null}
+        {weakAreas.length > 0 && weakAreas.length < profileAreas(profile).length ? (
+          <Muted>Błędy w zagadnieniach: {weakAreas.join(', ')}.</Muted>
+        ) : null}
         <Muted>Czas rozwiązywania: {solvingTime(elapsed)}</Muted>
       </Card>
 

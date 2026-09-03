@@ -125,6 +125,25 @@ export const WPA_PROFILE: ExamProfile = {
 };
 
 /** Questions at the front of the paper that must all be correct. Zero means no such group. */
+/**
+ * The areas a profile draws from, in paper order: bands as the profile lists them, sources
+ * within a band in the order they are drawn.
+ *
+ * Written out in three places before this — the diagnosis, the pool builder and the summary —
+ * and the diagnosis' row order is derived from it, so a fourth copy is a fourth chance for the
+ * table to stop matching the paper.
+ */
+export function profileAreas(profile: ExamProfile): string[] {
+  return profile.layers.flatMap((layer) => layer.sources.map((source) => source.category));
+}
+
+/** The areas whose questions open the paper, where a single mistake fails it. */
+export function criticalAreas(profile: ExamProfile): string[] {
+  return profile.layers
+    .filter((layer) => layer.critical)
+    .flatMap((layer) => layer.sources.map((source) => source.category));
+}
+
 export function criticalCount(profile: ExamProfile): number {
   return profile.layers
     .filter((layer) => layer.critical)
@@ -231,28 +250,6 @@ export function latestMisses(
   return [...verdicts].filter(([, wasCorrect]) => !wasCorrect).map(([questionId]) => questionId);
 }
 
-/**
- * Builds the per-layer drawing pools from the preferred questions, topping each up from the
- * layer's full pool.
- *
- * An exam built from your own mistakes can't blow up just because they all sit in one subject
- * area — `drawExam` needs its `count` from **every** layer, so each is topped up on its own.
- * Topping up globally, as an earlier version did, made the paper undrawable exactly when the
- * mistakes were lopsided: six mistakes all from the Act looked like a full pool, and the draw
- * then failed on the layer that had nothing.
- *
- * The preferred questions stay in their layer in full, so the exam still focuses on what you
- * don't know.
- *
- * Top-ups also ignore questions already pooled for an earlier layer, and that is deliberate
- * even though the app's own areas are a **partition** — with one area per question, this
- * subtracts nothing today (`categories.package.test` is what holds that). It stays because
- * nothing in this function's signature says the pools are disjoint, the test that holds the
- * partition **skips itself when the content bundle is absent**, and the failure it prevents is
- * the nastiest kind: the draw succeeding or refusing depending on the seed.
- *
- * @param fallbackLayers each layer's full pool, in profile order
- */
 /** How one subject area stands: distinct questions asked, and how many are currently right. */
 export interface AreaTally {
   seen: number;
@@ -317,6 +314,28 @@ export function areaProgress(
   return tally;
 }
 
+/**
+ * Builds the per-layer drawing pools from the preferred questions, topping each up from the
+ * layer's full pool.
+ *
+ * An exam built from your own mistakes can't blow up just because they all sit in one subject
+ * area — `drawExam` needs its `count` from **every** layer, so each is topped up on its own.
+ * Topping up globally, as an earlier version did, made the paper undrawable exactly when the
+ * mistakes were lopsided: six mistakes all from the Act looked like a full pool, and the draw
+ * then failed on the layer that had nothing.
+ *
+ * The preferred questions stay in their layer in full, so the exam still focuses on what you
+ * don't know.
+ *
+ * Top-ups also ignore questions already pooled for an earlier layer, and that is deliberate
+ * even though the app's own areas are a **partition** — with one area per question, this
+ * subtracts nothing today (`categories.package.test` is what holds that). It stays because
+ * nothing in this function's signature says the pools are disjoint, the test that holds the
+ * partition **skips itself when the content bundle is absent**, and the failure it prevents is
+ * the nastiest kind: the draw succeeding or refusing depending on the seed.
+ *
+ * @param fallbackLayers each layer's full pool, in profile order
+ */
 export function buildPool(
   preferred: Question[],
   fallbackBands: Question[][][],
@@ -354,7 +373,10 @@ export function buildPool(
         pool.push(question);
         taken.add(question.id);
       }
-      return { pool, secured: secured() };
+      // A capped source cannot contribute more than its cap, however much it holds. Summing
+      // the raw counts let a band pass this check and fail in `drawExam` instead — one
+      // question in the uncapped source plus three in a source capped at two reads as four.
+      return { pool, secured: Math.min(secured(), target) };
     });
 
     // Refuse here rather than hand back a band that cannot fill its slots: otherwise the
@@ -375,7 +397,6 @@ export function buildPool(
     return pools.map((entry) => entry.pool);
   });
 }
-
 
 /**
  * Which source of a band fills the next slot, or `null` when the band has run dry.
@@ -434,11 +455,12 @@ export function drawExam(
   const taken = new Set<string>();
 
   profile.layers.forEach((layer, bandIndex) => {
-    // What's already on the paper is off the table — otherwise a question
-    // that is both a provision of the Act and a penal one could be asked twice. The same pass
-    // drops repeats **inside** a pool: two copies of one question would otherwise both survive
-    // into the paper, and grading reads answers by question id, so a single answer would count
-    // twice — decisive when it lands in the critical four.
+    // What's already on the paper is off the table. The areas are a partition, so no band can
+    // offer a question another band already took, and across bands this removes nothing today;
+    // it stays because the pools are an argument and nothing here says they are disjoint. What
+    // it does earn its keep on is repeats **inside** a pool: two copies of one question would
+    // otherwise both survive into the paper, and grading reads answers by question id, so a
+    // single answer would count twice — decisive when it lands in the critical four.
     const pools = layer.sources.map((source, sourceIndex) => {
       const unique = new Map<string, Question>();
       for (const question of bands[bandIndex]?.[sourceIndex] ?? []) {

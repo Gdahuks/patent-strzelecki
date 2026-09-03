@@ -1,7 +1,7 @@
 import { Pressable, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 
 import { content } from '../content/store';
-import type { AreaTally, ExamProfile } from '../engine/exam';
+import { type AreaTally, type ExamProfile, criticalAreas, profileAreas } from '../engine/exam';
 import { useTheme } from '../theme';
 import { Card, Muted } from './ui';
 
@@ -55,7 +55,7 @@ export function AreaStandings({
   onOpen,
 }: {
   profile: ExamProfile;
-  /** Attempts the tally rests on — only those that recorded their areas. */
+  /** Attempts the tally rests on: the profile's whole history. */
   attempts: number;
   areas: Map<string, AreaTally>;
   onOpen: (slug: string) => void;
@@ -65,12 +65,9 @@ export function AreaStandings({
   // larger scale a constant 44 would clip "100%". Text scales itself, a fixed width doesn't.
   const { fontScale } = useWindowDimensions();
 
-  // The areas in paper order: bands as the profile lists them, sources within a band in the
-  // order they are drawn. One area means nothing to compare, which is the police exam.
-  const slugs = profile.layers.flatMap((layer) => layer.sources.map((source) => source.category));
-  const criticals = profile.layers
-    .filter((layer) => layer.critical)
-    .flatMap((layer) => layer.sources.map((source) => source.category));
+  // One area means nothing to compare, which is the police exam.
+  const slugs = profileAreas(profile);
+  const criticals = criticalAreas(profile);
 
   if (slugs.length < 2 || attempts < MIN_ATTEMPTS) return null;
 

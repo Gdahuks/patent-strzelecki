@@ -8,7 +8,12 @@
 
 import type { Question } from './types';
 import { content } from './store';
-import { type ExamProfile, NotEnoughQuestionsError, drawExam } from '../engine/exam';
+import {
+  type ExamProfile,
+  NotEnoughQuestionsError,
+  drawExam,
+  profileAreas,
+} from '../engine/exam';
 
 /**
  * Every band's questions, one pool per source — the shape `drawExam` and `buildPool` want.
@@ -26,7 +31,7 @@ export function profileBands(profile: ExamProfile): Question[][][] {
 /** Every question the profile can ask, deduplicated — bands overlap. */
 export function profileQuestions(profile: ExamProfile): Question[] {
   return content.questionsForSets(
-    profile.layers.flatMap((layer) => layer.sources.map((source) => source.category)),
+    profileAreas(profile),
   );
 }
 

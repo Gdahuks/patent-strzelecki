@@ -151,9 +151,11 @@ describe('drawExam', () => {
     assert.equal(new Set(ids).size, ids.length);
   });
 
-  it('does not repeat a question that belongs to two areas', () => {
-    // 43 questions in the bundle are penal provisions of the Act itself, so they sit in both
-    // the first area and the fifth. Without dedup the same question could be asked twice.
+  it('does not repeat a question offered by two bands', () => {
+    // The app's own areas are a partition, so this cannot arise from the bundle — the pools
+    // are an argument, though, and `drawExam` promises a paper without repeats for any pools
+    // it is given. Grading reads answers by question id, so a repeat would count one answer
+    // twice.
     const shared = question('shared');
     const pools = full();
     pools[0][0] = [shared, ...pools[0][0]];
@@ -260,6 +262,22 @@ describe('profile shape', () => {
   it('the licence paper opens with four questions that must be correct', () => {
     assert.equal(criticalCount(PATENT_PROFILE), 4);
     assert.equal(criticalCount(WPA_PROFILE), 0);
+  });
+
+  it('leaves exactly one source of each band without a share, holding less than all of it', () => {
+    // `pickSource` rolls against the shares and gives the remainder to the source without
+    // one. Two shareless sources in a band would make the second unreachable, and shares
+    // summing to 1 or more would starve it — both silent: the paper still comes out full,
+    // just never asking what the missing source was for.
+    for (const profile of [PATENT_PROFILE, WPA_PROFILE]) {
+      for (const layer of profile.layers) {
+        const shareless = layer.sources.filter((source) => source.share === undefined);
+        assert.equal(shareless.length, 1, `${profile.id}: ${JSON.stringify(layer.sources)}`);
+
+        const shares = layer.sources.reduce((sum, source) => sum + (source.share ?? 0), 0);
+        assert.ok(shares < 1, `${profile.id}: udziały sumują się do ${shares}`);
+      }
+    }
   });
 });
 
@@ -530,6 +548,25 @@ describe('buildPool', () => {
     // next. The refusal belongs here, where the shortage is known, and names the area.
     assert.throws(
       () => buildPool(preferred('u0'), [[[], []], [[]], [[]], [[]]], PATENT_PROFILE),
+      (error: Error) =>
+        error instanceof NotEnoughQuestionsError
+        && error.category === PATENT_PROFILE.layers[0].sources[0].category,
+    );
+  });
+
+  it('refuses when a capped source is the only thing holding a band up', () => {
+    // The weighted source is capped at two, so however many of its questions are in the pool,
+    // it can never fill more than two of the band's four slots. Only the preferred questions
+    // can push a source past its cap — the top-up stops at it — so this needs three mistakes
+    // from the safety rules against a single question of the Act. Summing the raw pools read
+    // that as four available, and the refusal then came out of `drawExam`: later, and naming
+    // the wrong shortage.
+    const bands = full();
+    bands[0][0] = [question('u0')];
+    bands[0][1] = [question('b0'), question('b1'), question('b2')];
+
+    assert.throws(
+      () => buildPool(preferred('b0', 'b1', 'b2'), bands, PATENT_PROFILE),
       (error: Error) =>
         error instanceof NotEnoughQuestionsError
         && error.category === PATENT_PROFILE.layers[0].sources[0].category,
