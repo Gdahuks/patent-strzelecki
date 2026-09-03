@@ -39,6 +39,18 @@ const MODES: { key: PracticeMode; label: string }[] = [
   { key: 'test', label: 'Test ABC' },
 ];
 
+/*
+ * There is deliberately no second switch here for the exam's five subject areas.
+ *
+ * One was built and removed: two identical-looking switches stacked read as one choice split
+ * in two, and two of the five areas are literally single course sets, so the list showed the
+ * same rows twice under different names. The areas answer a different question — "what am I
+ * worst at" — which is diagnosis, not browsing, so they live on the exam screen, where the
+ * answer comes from actual attempts, and a tap there opens that area's own screen. This
+ * list stays what it is: the course's own sets, in the course's own words, for the phase when
+ * someone is reading the lessons.
+ */
+
 export default function CwiczeniaScreen() {
   const theme = useTheme();
   const router = useRouter();
@@ -126,7 +138,7 @@ export default function CwiczeniaScreen() {
           onPress: () => router.push(`/questions/${mode}/${row.slug}`),
         },
         {
-          text: 'Wyzeruj postęp tego zestawu',
+          text: 'Wyzeruj postęp',
           style: 'destructive',
           onPress: () =>
             Alert.alert(
@@ -170,7 +182,7 @@ export default function CwiczeniaScreen() {
             {mode === 'flashcards'
               ? 'Fiszka pokazuje poprawną odpowiedź — chodzi o zapamiętanie jej treści.'
               : 'Test sprawdza, czy rozpoznajesz poprawną odpowiedź wśród trzech wariantów.'}{' '}
-            Postęp jest liczony osobno dla każdego trybu. Przytrzymaj zestaw, żeby przejrzeć
+            Postęp jest liczony osobno dla każdego trybu. Przytrzymaj wiersz, żeby przejrzeć
             jego pytania albo wyzerować postęp.
           </Muted>
         </View>
@@ -193,7 +205,7 @@ export default function CwiczeniaScreen() {
           // screen reader that gesture is practically nonexistent — VoiceOver and TalkBack
           // have it claimed for their own purposes. This action exposes the same menu in the
           // rotor.
-          accessibilityActions={[{ name: 'longpress', label: 'Przegląd i zerowanie zestawu' }]}
+          accessibilityActions={[{ name: 'longpress', label: 'Przegląd i zerowanie postępu' }]}
           onAccessibilityAction={(event) => {
             if (event.nativeEvent.actionName === 'longpress') onLongPress(item);
           }}

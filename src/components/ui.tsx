@@ -159,7 +159,10 @@ export function ModeSwitch<Key extends string>({
   const theme = useTheme();
 
   return (
-    <View style={[styles.switch, { backgroundColor: theme.surface, borderColor: theme.border }]}>
+    <View
+      accessibilityRole="tablist"
+      style={[styles.switch, { backgroundColor: theme.surface, borderColor: theme.border }]}
+    >
       {options.map((option) => {
         const active = option.key === value;
         return (

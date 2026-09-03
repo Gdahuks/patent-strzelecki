@@ -338,6 +338,16 @@ a counting bug, since both numbers sit on the same screen. Manually marking a qu
 "mastered" **must** push `seen` above zero, or the question counts simultaneously as mastered
 and untouched, and "needs work" comes out negative.
 
+**The review screen has two groupings, and the entry point picks one.** From practice it
+groups by the spaced-repetition buckets, which is what the reader is looking at there. From the
+exam side — the area screen, and the drill of an area's exam mistakes — the route carries
+`?egzamin=<profil>` and the same screen lists the **whole** area by the latest exam verdict:
+„Błędne", „Poprawne", „Pozostałe". A review of the six mistakes alone is a list you have just
+been through; what makes it worth opening is the rest of the area underneath, in the order that
+says where you stand. In that mode there is no bucket caption and no manual state-fix button —
+both speak about the grouping that isn't on screen, and a button offering to change a verdict
+only another exam can change would be a lie.
+
 **There are two ways into a set's review screen**: long-pressing a set on the practice list
 (a menu offering review and reset), or tapping the footer progress bar inside an open set. There
 is deliberately no separate button in the header — one existed and was removed as a second path
@@ -361,9 +371,19 @@ history alike. It used to exist as two copies, one per screen, and they drifted 
 change. Both sections must look identical — the only difference is the line showing your own
 answer, which there's no reason to show when you got it right.
 
-**An exam built from the weak-question pool goes through `buildPool`**, because `drawExam`
-requires four critical questions and ten in total — and there may be fewer mistakes than that,
-none of them critical. Without topping the pool up from the database, the screen would throw.
+**An exam built from the weak-question pool goes through `buildPool`, which tops up every
+subject area separately.** `drawExam` needs its two questions from each of the five areas, and
+mistakes are usually lopsided — six of them all from the Act look like a full pool while the
+draw has nothing to take from the range-regulations area. Topping up globally (the earlier
+rule) produced exactly that: an exception thrown from an async effect, which no error boundary
+catches, leaving the attempt screen on its spinner for good. Hence also the `try/catch` around
+composing the paper in `app/exam/attempt.tsx` — and `profileAvailable` checking each area on
+its own rather than the pool's total size, which says nothing.
+
+The top-up also skips questions already pooled for an earlier area. The areas are a partition,
+so that subtracts nothing today — it stays because nothing in the function's signature says the
+pools are disjoint, the test that holds the partition skips itself without a content bundle, and
+the failure it prevents is the draw succeeding or refusing depending on the seed.
 
 **Search matches from the start of a word, not anywhere inside it.** A plain `includes` made
 "bron" (gun) match inside "obrona" (defence). `findAtWordStart` gets the same effect without a
@@ -496,12 +516,61 @@ around. That's also why the reading-progress rules live in `src/engine/readingPr
 `src/db/reading.ts` only re-exporting them. Don't merge them back together — the tests will stop
 running.
 
-## Exam rules (reproduced from the course)
+## Exam rules (from § 19 of the PZSS regulation, not from the course)
 
-10 questions, 20 minutes, a 9/10 pass mark. The first 4 questions come from UoBiA and the safety
-rules, and **must all be correct** — a mistake in that group of four fails the exam regardless
-of the overall score. Question order and answer order are both shuffled. The local version does
-not reproduce the course's server-side, shared attempt history stored under a "key".
+10 questions, 20 minutes, a 9/10 pass mark. The paper opens with **four questions from the Act
+and the safety rules** that must all be correct — a mistake there fails the exam regardless of
+the overall score — and continues with **two questions from each of the three remaining areas**:
+range regulations, firearm construction with the ISSF rules, and penal law. Question order and
+answer order are both shuffled, inside the opening four as well.
+
+**How many of the opening four are about safety is deliberately random: none, one or two.**
+§ 19 ust. 1 asks for two questions from each of five areas, which would fix that group at
+2 + 2 — and half of it then comes from a 24-question pool anyone learns by heart, so the mock
+would pass far more readily than a real paper drawn the other way. We don't know how a
+committee fills it: the regulation implies 2 + 2, PZSS's own published question list falls into
+four topical blocks rather than five, and the only eyewitness account describes four questions
+from the Act. So the group is one band with the safety rules weighted at 25% a slot and capped
+at two — 31.6% of papers get none, 42.2% one, 26.2% two. The cap is not a fudge: no reading of
+a real paper produces three. Going back to the regulation's letter is two numbers in
+`PATENT_PROFILE` (`share: 0.5` and `max: 2` become a second band of `count: 2`).
+
+**The composition comes from the regulation, not from the course's quiz.** The course draws its
+mock exam flat from all 656 questions, which is why a paper there was ~3.4 questions from the
+police (WPA) list, 0.45 from the safety rules and 0.33 from the range regulations — and why 79%
+of papers had no safety question in the group where a single mistake fails you. The course
+describes the 2×5 rule on its own page and doesn't implement it; the app does, bar the opening
+four. The areas are sums of the course's own sets, declared in `src/content/categories.ts`,
+and they are a **partition**: every question belongs to exactly one area, or to none (the 200 police-exam
+questions). Where the course files a question in two — 43 questions are the Act's own sanctions,
+art. 51 and art. 18 ust. 5, filed under both "UoBiA" and "Prawo karne" — the narrower area wins
+it, which is what the `general` flag on area 1 means. Their user-facing names follow what is
+inside rather than the regulation's wording, and the reason is written down next to each one.
+
+**The exam screen carries the per-area standing, and that is where the areas belong.** They
+answer "what am I worst at", which is diagnosis, not browsing — a second switch over the
+practice list was built and removed. The tally counts **distinct questions by their latest
+verdict**, the same rule as the mistake pool, so it heals when someone improves and can't be
+inflated by repeats; `seen` doubles as coverage. Weak areas are marked against a threshold
+(higher for the opening four), never ranked.
+
+**Nothing about areas is stored on an answer: the area is derived from the question**
+(`content.areaOf`). An earlier version recorded it at draw time, and that one denormalisation
+produced three defects at once — the counter and the drill beside it came from two different
+definitions of "this area's questions" ("pytano o 11" next to "powtórz 16"), attempts saved
+before the change could not be counted at all, and the same question was critical in one paper
+and not in the next. Counting a double-filed question in both rows is not the fix either: with
+the paper drawing it from one area only, the other row would report on a group the question
+never appeared in — someone could answer every critical question correctly and still read a
+failing critical row. The partition is what makes the paper and the numbers about it agree by
+construction, and `categories.package.test.ts` is what holds it against a content refresh.
+
+The design, the numbers behind it, and what is still unresolved (whether real papers open with
+2+2 or 4 questions from the Act) are written up in the scraper repo, alongside the other specs.
+
+The local version does not reproduce the course's server-side, shared attempt history stored
+under a "key", nor its four paper lengths and three pool switches — coverage of the base is what
+the practice tab is for.
 
 Flashcards and the ABC quiz are different tools: a flashcard shows **only the correct answer**
 (the goal is memorising its content), the quiz practises recognising it among distractors.

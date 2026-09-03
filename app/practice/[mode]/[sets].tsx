@@ -17,14 +17,15 @@ import { LawLink } from '../../../src/components/LawLink';
 import { positionLabel } from '../../../src/content/answers';
 import { useBottomInset } from '../../../src/components/safeArea';
 import { SegmentedBar } from '../../../src/components/ui';
-import { WEAK_SET_SLUG, content } from '../../../src/content/store';
+import { planPracticeSet, practiceSetTitle } from '../../../src/content/practiceSet';
+import { content } from '../../../src/content/store';
 import type { Letter, Question } from '../../../src/content/types';
 import {
   type PracticeMode,
   loadCards,
   resetProgress,
   saveCard,
-  weakQuestionIds,
+  questionsForPlan,
 } from '../../../src/db/database';
 import {
   type DeckState,
@@ -44,7 +45,7 @@ import { useTheme } from '../../../src/theme';
 const HISTORY_LIMIT = 30;
 
 export default function ExerciseScreen() {
-  const params = useLocalSearchParams<{ mode: string; sets: string }>();
+  const params = useLocalSearchParams<{ mode: string; sets: string; bledy?: string }>();
   const mode: PracticeMode = params.mode === 'flashcards' ? 'flashcards' : 'test';
   const setSlugs = useMemo(() => params.sets.split(',').filter(Boolean), [params.sets]);
 
@@ -60,10 +61,18 @@ export default function ExerciseScreen() {
   // bottom below the other three sides on a device with no bottom inset.
   const donePadding = useBottomInset(28);
 
-  // The "moje błędy" (my mistakes) set doesn't exist in the content bundle — it's assembled
-  // from the progress database, so its questions have to be loaded asynchronously, same as
-  // the buckets themselves.
-  const isWeak = setSlugs.length === 1 && setSlugs[0] === WEAK_SET_SLUG;
+  /**
+   * What this route is a set of — a course set, the virtual "moje błędy", or one area narrowed
+   * to its exam mistakes (`?bledy=<profil>`).
+   *
+   * The rule lives in `planPracticeSet` because the question browser needs exactly the same
+   * answer, and the two screens working it out separately is what let the browser open all 252
+   * questions of an area from a drill of six. Two of the three kinds are assembled from the
+   * database, so the questions still load asynchronously.
+   */
+  const examProfileId = params.bledy;
+  const plan = useMemo(() => planPracticeSet(setSlugs, examProfileId), [setSlugs, examProfileId]);
+  const isWeak = plan.kind === 'weak';
   const [questions, setQuestions] = useState<Question[] | null>(null);
   const [deck, setDeck] = useState<DeckState | null>(null);
   const [currentId, setCurrentId] = useState<string | null>(null);
@@ -141,9 +150,7 @@ export default function ExerciseScreen() {
     let cancelled = false;
 
     void (async () => {
-      const pool = isWeak
-        ? content.questionsByIds(await weakQuestionIds(mode))
-        : content.questionsForSets(setSlugs);
+      const pool = await questionsForPlan(plan, mode);
       if (cancelled) return;
 
       const ids = pool.map((question) => question.id);
@@ -162,7 +169,7 @@ export default function ExerciseScreen() {
     return () => {
       cancelled = true;
     };
-  }, [setSlugs, isWeak, mode, levels, advance]);
+  }, [plan, mode, levels, advance]);
 
   /**
    * The deck as seen by the refresh effect.
@@ -407,7 +414,7 @@ export default function ExerciseScreen() {
     );
   }, [questions, mode, levels, advance, cancelPendingAdvance]);
 
-  const title = content.titleForSets(setSlugs);
+  const title = practiceSetTitle(plan);
 
   const header = (
     <Stack.Screen
@@ -726,7 +733,12 @@ export default function ExerciseScreen() {
         // moved the quiz on behind the question list.
         onPress={() => {
           cancelPendingAdvance();
-          router.push(`/questions/${mode}/${params.sets}`);
+          // From a drill of exam mistakes the review shows the **whole** area, grouped by the
+          // exams' own verdicts: the six mistakes are a list you have just been through, and
+          // what makes the review worth opening is the rest of the area under them.
+          router.push(
+            `/questions/${mode}/${params.sets}${examProfileId ? `?egzamin=${examProfileId}` : ''}`,
+          );
         }}
         accessibilityRole="button"
         // Without a label, a screen reader would read the three lines of numbers and

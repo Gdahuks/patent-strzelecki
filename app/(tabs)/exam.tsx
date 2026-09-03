@@ -2,10 +2,12 @@ import { useFocusEffect, useRouter } from 'expo-router';
 import { useCallback, useMemo, useState } from 'react';
 import { Alert, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
+import { AreaStandings } from '../../src/components/AreaStandings';
 import { Button, Card, ModeSwitch, Muted } from '../../src/components/ui';
 import { profileAvailable, profileMisses, profileQuestions } from '../../src/content/examPool';
 import {
   type StoredAttempt,
+  areaStandings,
   clearAttempts,
   deleteAttempt,
   missedQuestionIds,
@@ -13,10 +15,11 @@ import {
 } from '../../src/db/database';
 import {
   EXAM_PROFILES,
+  type AreaTally,
   type ExamProfileId,
   PATENT_PROFILE,
   examProfile,
-  isCritical,
+  criticalCount,
 } from '../../src/engine/exam';
 import { plural } from '../../src/engine/plural';
 import { useTheme } from '../../src/theme';
@@ -48,7 +51,10 @@ export default function EgzaminScreen() {
    * buttons and the history — „9/10" and „18/20" are different scales and must never end up
    * in one list.
    */
-  const [profileId, setProfileId] = useState<ExamProfileId>(PATENT_PROFILE.id);
+  // The first profile the bundle can actually serve, not the licence one by name: with the
+  // paper composed from subject areas, a bundle missing one set makes that exam undrawable,
+  // and the switch then hides it while the screen would still offer its button.
+  const [profileId, setProfileId] = useState<ExamProfileId>(AVAILABLE[0]?.id ?? PATENT_PROFILE.id);
   const profile = examProfile(profileId);
 
   /** `null` until the profile's history has been read — never an empty list standing in for it. */
@@ -68,13 +74,37 @@ export default function EgzaminScreen() {
    */
   const [missedCount, setMissedCount] = useState(0);
 
+  /** Per-area standing, and how many attempts it rests on. */
+  const [standings, setStandings] = useState<{ attempts: number; areas: Map<string, AreaTally> }>({
+    attempts: 0,
+    areas: new Map(),
+  });
+
   const pool = useMemo(() => profileQuestions(profile), [profile]);
 
+  /**
+   * Three reads, dropped if the screen moves on before they land.
+   *
+   * Without the flag a late read from the previous profile can overwrite the new one's state —
+   * the same hazard `onSelectProfile` clears the screen for, one step further along: switching
+   * profile twice quickly would land a stale table of areas under the current heading.
+   */
   const refresh = useCallback(() => {
-    void recentAttempts(profile.id).then(setAttempts);
-    void missedQuestionIds(profile.id).then((ids) =>
-      setMissedCount(profileMisses(ids, pool).length),
-    );
+    let cancelled = false;
+
+    void recentAttempts(profile.id).then((rows) => {
+      if (!cancelled) setAttempts(rows);
+    });
+    void missedQuestionIds(profile.id).then((ids) => {
+      if (!cancelled) setMissedCount(profileMisses(ids, pool).length);
+    });
+    void areaStandings(profile.id).then((read) => {
+      if (!cancelled) setStandings(read);
+    });
+
+    return () => {
+      cancelled = true;
+    };
   }, [profile, pool]);
 
   useFocusEffect(refresh);
@@ -91,6 +121,7 @@ export default function EgzaminScreen() {
     setProfileId(id);
     setAttempts(null);
     setMissedCount(0);
+    setStandings({ attempts: 0, areas: new Map() });
   }, []);
 
   const onDelete = useCallback(
@@ -136,9 +167,13 @@ export default function EgzaminScreen() {
     );
   }, [profile, refresh]);
 
-  const criticalPool = pool.filter((question) => isCritical(question, profile)).length;
   const passed = (attempts ?? []).filter((attempt) => attempt.passed).length;
   const minutes = profile.timeLimitSeconds / 60;
+  const criticals = criticalCount(profile);
+  // How many of the opening four can be about safety, read off the profile rather than typed
+  // into the sentence: going back to the regulation's 2+2 is a change of these numbers, and a
+  // hardcoded range would then describe an exam the app no longer sets.
+  const safetyCap = profile.layers[0]?.sources[1]?.max ?? criticals;
 
   return (
     <ScrollView contentContainerStyle={styles.body}>
@@ -157,11 +192,11 @@ export default function EgzaminScreen() {
           {profile.questionCount} pytań · {minutes} minut · próg {profile.passThreshold}/
           {profile.questionCount}
         </Text>
-        {profile.criticalCount > 0 ? (
+        {criticals > 0 ? (
           <Muted>
-            Pierwsze {profile.criticalCount} pytania pochodzą z UoBiA i zasad bezpieczeństwa. Każdy
-            błąd w tej czwórce oznacza niezdanie niezależnie od reszty wyniku — tak samo jak na
-            prawdziwym egzaminie PZSS.
+            Pierwsze {criticals} pytania — z UoBiA i zasad bezpieczeństwa — muszą być bezbłędne;
+            ile z nich jest o bezpieczeństwie, jest losowe (0–{safetyCap}). Dalej po dwa
+            pytania z pozostałych trzech zagadnień.
           </Muted>
         ) : (
           <Muted>
@@ -170,11 +205,16 @@ export default function EgzaminScreen() {
           </Muted>
         )}
         <Muted>
-          Kolejność pytań i odpowiedzi jest losowana, żeby nie dało się wkuwać pozycji. Losujemy
-          z {pool.length} pytań
-          {profile.criticalCount > 0 ? `, w tym ${criticalPool} krytycznych` : ''}.
+          Kolejność pytań i odpowiedzi jest losowana, żeby nie dało się wkuwać pozycji.
         </Muted>
       </Card>
+
+      <AreaStandings
+        profile={profile}
+        attempts={standings.attempts}
+        areas={standings.areas}
+        onOpen={(slug) => router.push(`/area/${slug}?profile=${profile.id}`)}
+      />
 
       <Button
         label="Rozpocznij egzamin"
@@ -196,9 +236,8 @@ export default function EgzaminScreen() {
                 „z 1 pytania, na których". One mistake is the common case on a fresh
                 profile, since each exam keeps its own pool. */}
             {plural(missedCount, 'na którym', 'na których', 'na których')} pomyliłeś się
-            w tym egzaminie. Zasady te same; gdy błędów nie starcza na pełny zestaw
-            {profile.criticalCount > 0 ? ' albo na czwórkę krytyczną' : ''}, pula dopełniana jest
-            z całej puli tego egzaminu.
+            w tym egzaminie. Zasady te same; gdy błędów nie starcza w jakimś zagadnieniu, brakujące
+            pytania dobierane są z całej puli tego zagadnienia.
           </Muted>
         </>
       ) : null}
@@ -207,7 +246,12 @@ export default function EgzaminScreen() {
         <Text style={[styles.sectionTitle, { color: theme.text }]}>Historia</Text>
         {attempts && attempts.length > 0 ? (
           <Muted>
-            {passed} {plural(passed, 'zdane', 'zdane', 'zdanych')} z {attempts.length}
+            {/* „z ostatnich 20" once the list is capped: the card above counts the whole
+                history, so a bare „z 20" under „z 25 podejść" reads as one of them being
+                wrong. */}
+            {passed} {plural(passed, 'zdane', 'zdane', 'zdanych')} z
+            {standings.attempts > attempts.length ? ' ostatnich ' : ' '}
+            {attempts.length}
           </Muted>
         ) : null}
       </View>

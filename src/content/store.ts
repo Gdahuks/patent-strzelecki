@@ -7,6 +7,7 @@
  * relative image paths to resolve against.
  */
 
+import { CATEGORIES, category, partitionQuestions } from './categories';
 import type { ContentBundle, Lesson, Question, QuestionSet } from './types';
 
 /**
@@ -21,6 +22,49 @@ const bundle = require('../../assets/content/content.json') as ContentBundle;
 const questionsById = new Map(bundle.questions.map((question) => [question.id, question]));
 const lessonsBySlug = new Map(bundle.lessons.map((lesson) => [lesson.slug, lesson]));
 const setsBySlug = new Map(bundle.sets.map((set) => [set.slug, set]));
+
+/**
+ * The one area each question belongs to — the single source of that fact in the app.
+ *
+ * The rule lives in `partitionQuestions`, where it can be tested on a fixture; this is only
+ * the bundle poured into it. Everything about areas is read from here — the pools the paper is
+ * drawn from, the rows of the diagnosis, the questions behind an area's flashcards — so the
+ * paper and the numbers about it cannot drift apart. The 200 WPA questions are in no area at
+ * all; the map simply has no entry for them.
+ */
+const areaByQuestion: Map<string, string> = partitionQuestions(
+  new Map(bundle.sets.map((set) => [set.slug, set.questionIds])),
+  bundle.questions.map((question) => question.id),
+);
+
+/**
+ * Each area's questions, in bundle order.
+ *
+ * Built from `areaByQuestion` rather than from the sets, so an area's list is exactly the
+ * questions the area owns. Bundle order, not set order: it is stable across content refreshes
+ * of the sets themselves, and nothing downstream depends on the old order — the practice deck
+ * orders by bucket and the exam draws at random.
+ */
+const idsByArea: Map<string, string[]> = (() => {
+  const lists = new Map<string, string[]>(CATEGORIES.map((entry) => [entry.slug, []]));
+  for (const question of bundle.questions) {
+    const area = areaByQuestion.get(question.id);
+    if (area) lists.get(area)?.push(question.id);
+  }
+  return lists;
+})();
+
+/**
+ * Question ids behind a slug, which may name either a course set or one of our categories.
+ *
+ * Having this in one place is what keeps the practice screen, the question browser and the
+ * exam drawing from the same definition of a subject area.
+ */
+function idsForSlug(slug: string): string[] {
+  const entry = category(slug);
+  if (!entry) return setsBySlug.get(slug)?.questionIds ?? [];
+  return idsByArea.get(entry.slug) ?? [];
+}
 
 export const content = {
   version: bundle.version,
@@ -49,13 +93,14 @@ export const content = {
   /**
    * Questions for one or several sets at once, without duplicates.
    * Compound sets ("uobia,pzss") are just a shorthand in the course, so we assemble them
-   * ourselves.
+   * ourselves. A slug naming one of our exam categories resolves the same way, which is why
+   * the practice and question-browser screens needed no change to gain them.
    */
   questionsForSets(slugs: string[]): Question[] {
     const seen = new Set<string>();
     const result: Question[] = [];
     for (const slug of slugs) {
-      for (const id of setsBySlug.get(slug)?.questionIds ?? []) {
+      for (const id of idsForSlug(slug)) {
         if (seen.has(id)) continue;
         seen.add(id);
         const question = questionsById.get(id);
@@ -79,11 +124,25 @@ export const content = {
       .filter((question): question is Question => question !== undefined);
   },
 
+  /**
+   * The subject area a question belongs to, or undefined when it belongs to none.
+   *
+   * The exam records nothing about areas on an answer: this is derivable from the question
+   * alone, so storing it would be a second copy of the same fact — and it was one, until the
+   * copy started disagreeing with this. Deriving it also means the whole attempt history
+   * counts, including papers taken before the areas existed.
+   */
+  areaOf(questionId: string): string | undefined {
+    return areaByQuestion.get(questionId);
+  },
+
   /** A set's title — for practice screen headers. */
   titleForSets(slugs: string[]): string {
-    const titles = slugs.map((slug) =>
-      slug === WEAK_SET_SLUG ? WEAK_SET_TITLE : (setsBySlug.get(slug)?.title ?? slug),
-    );
+    const titles = slugs.map((slug) => {
+      if (slug === WEAK_SET_SLUG) return WEAK_SET_TITLE;
+      return category(slug)?.title ?? setsBySlug.get(slug)?.title ?? slug;
+    });
     return titles.length === 1 ? titles[0] : titles.join(' + ');
   },
+
 };

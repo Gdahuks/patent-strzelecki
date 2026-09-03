@@ -8,23 +8,53 @@
 
 import type { Question } from './types';
 import { content } from './store';
-import type { ExamProfile } from '../engine/exam';
+import {
+  type ExamProfile,
+  NotEnoughQuestionsError,
+  drawExam,
+  profileAreas,
+} from '../engine/exam';
 
-/** The whole question base, or just the sets the profile names. */
+/**
+ * Every band's questions, one pool per source — the shape `drawExam` and `buildPool` want.
+ *
+ * A source names its category by slug and `questionsForSets` resolves both categories and
+ * plain course sets, so the police exam (one band, one source, the course's `wpa` set) needs
+ * no special case.
+ */
+export function profileBands(profile: ExamProfile): Question[][][] {
+  return profile.layers.map((layer) =>
+    layer.sources.map((source) => content.questionsForSets([source.category])),
+  );
+}
+
+/** Every question the profile can ask, deduplicated — bands overlap. */
 export function profileQuestions(profile: ExamProfile): Question[] {
-  return profile.setSlugs ? content.questionsForSets([...profile.setSlugs]) : content.questions;
+  return content.questionsForSets(
+    profileAreas(profile),
+  );
 }
 
 /**
  * Whether this build's bundle can actually serve the profile.
  *
- * A profile drawing from a named set depends on the bundle carrying that set. It does today,
- * and the scraper would notice if it stopped — but a screen that offers an exam it cannot
- * draw would fail at the worst moment, right after the tap. Offering one option fewer is the
- * better failure.
+ * Answered by composing one paper and seeing whether it holds — not by counting. A pool of
+ * 456 says nothing when one area lost its set, and counting per band is not enough either:
+ * the areas overlap, so an earlier band can take away everything a later one had. Two areas
+ * of two questions each, holding the same two questions, pass every arithmetic check and
+ * still cannot make a paper.
+ *
+ * Offering an exam that fails right after the tap is the worse failure, so a profile the
+ * bundle can't serve is offered one option fewer.
  */
 export function profileAvailable(profile: ExamProfile): boolean {
-  return profileQuestions(profile).length >= profile.questionCount;
+  try {
+    drawExam(profileBands(profile), profile);
+    return true;
+  } catch (error) {
+    if (error instanceof NotEnoughQuestionsError) return false;
+    throw error;
+  }
 }
 
 /**
@@ -34,6 +64,9 @@ export function profileAvailable(profile: ExamProfile): boolean {
  * profile. This is the second, narrower guard: a profile's pool comes from the content bundle,
  * and the bundle can change under a database that outlives it. A question dropped from the
  * course's WPA list would otherwise come back on a WPA paper through an old attempt.
+ *
+ * It also filters out what the patent profile stopped asking when the paper's composition
+ * changed: the 200 police-exam questions and the handful outside the regulation's scope.
  *
  * It has to be the same call on the exam screen and inside the attempt, or the count next to
  * the button would promise questions the draw can't use.

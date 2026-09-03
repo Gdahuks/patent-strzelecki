@@ -16,7 +16,7 @@ kursu. Adres do zgłoszeń jest w aplikacji, w ustawieniach.
 | | | | |
 | --- | --- | --- | --- |
 | ![Lekcja z interaktywnym schematem](docs/zrzuty/01-lekcja.png) | ![Test ABC po odpowiedzi](docs/zrzuty/02-test.png) | ![Akt prawny z przyszłym brzmieniem](docs/zrzuty/03-akt.png) | ![Egzamin próbny](docs/zrzuty/04-egzamin.png) |
-| Lekcja — schemat reaguje na dotknięcie, choć skrypty kursu są wycinane przy budowie paczki | Test ABC — werdykt niesie znak, nie sam kolor, a podstawa prawna odsłania się dopiero po odpowiedzi | Ustawa offline — przepis z uchwaloną przyszłą wersją mówi, od kiedy się zmieni | Egzamin na zasadach kursu — pasek pokazuje stan arkusza, pytania krytyczne są oznaczone |
+| Lekcja — schemat reaguje na dotknięcie, choć skrypty kursu są wycinane przy budowie paczki | Test ABC — werdykt niesie znak, nie sam kolor, a podstawa prawna odsłania się dopiero po odpowiedzi | Ustawa offline — przepis z uchwaloną przyszłą wersją mówi, od kiedy się zmieni | Egzamin na zasadach § 19 regulaminu PZSS — pasek pokazuje stan arkusza, pytania krytyczne są oznaczone |
 
 ## Co jest w środku
 
@@ -44,10 +44,14 @@ Co robi aplikacja:
 - **Nauka** — cała teoria kursu offline, z odnośnikami działającymi wewnątrz aplikacji,
   dymkami skrótów, postępem czytania i szukaniem na stronie.
 - **Ćwiczenia** — fiszki i test ABC z osobnym postępem (powtórki Leitnera, liczba poziomów
-  do ustawienia), zestaw „moje błędy", przegląd wszystkich pytań zestawu z podziałem na stany
-  i ręczną korektą.
-- **Egzamin** — 10 pytań, 20 minut, próg 9/10 z pytaniami krytycznymi, historia podejść,
-  egzamin z puli własnych pomyłek.
+  do ustawienia), zestawy kursu i zestaw „moje błędy", przegląd wszystkich pytań zestawu
+  z podziałem na stany i ręczną korektą.
+- **Egzamin** — 10 pytań, 20 minut, próg 9/10; arkusz składany po zagadnieniach § 19 regulaminu
+  patentowego PZSS: cztery pytania z ustawy i zasad bezpieczeństwa bez prawa błędu, dalej po dwa
+  z pozostałych trzech zagadnień. Do tego wyniki po zagadnieniach liczone z własnych podejść —
+  z każdego wiersza wchodzi się w zagadnienie, jego pytania w podziale na błędne, poprawne
+  i pozostałe oraz powtórkę własnych pomyłek — historia i egzamin z puli własnych pomyłek. Osobno egzamin przed komisją WPA na zasadach z § 4
+  rozporządzenia o egzaminie.
 - **Akty prawne** — czytanie całych ustaw offline, spis jednostek, skoki z podstaw prawnych
   pytań, przypisy jako dymki.
 - **Szukanie** — po pytaniach, lekcjach i tekstach ustaw, z przejściem w konkretne miejsce.

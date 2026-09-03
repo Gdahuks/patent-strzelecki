@@ -9,7 +9,21 @@
 
 import * as SQLite from 'expo-sqlite';
 
-import { type ExamProfileId, latestMisses } from '../engine/exam';
+// The area lookup comes from the content bundle, and this is the safe direction of that
+// dependency: `src/content/` must never import `src/db/` (that would pull expo-sqlite into
+// tests that run without the app), while the reverse costs nothing — this module only ever
+// runs inside the app.
+import type { PracticeSetPlan } from '../content/practiceSet';
+import { content } from '../content/store';
+import type { Question } from '../content/types';
+import {
+  type AreaTally,
+  type ExamProfileId,
+  areaProgress,
+  examProfile,
+  latestMisses,
+  latestVerdicts,
+} from '../engine/exam';
 import type { Card } from '../engine/leitner';
 
 const DATABASE = 'patent.db';
@@ -370,6 +384,42 @@ export async function weakQuestionIds(mode: PracticeMode, maxBucket = 0): Promis
  * The cost is deliberate: the same question can need fixing separately in each exam. That's
  * how flashcards and the ABC quiz already work — separate tracks, separate counters.
  */
+/** Whether a parsed entry carries the two fields every reader of an attempt touches. */
+function isAnswer(value: unknown): value is AttemptAnswer {
+  if (typeof value !== 'object' || value === null) return false;
+  const answer = value as Partial<AttemptAnswer>;
+  return typeof answer.questionId === 'string' && typeof answer.wasCorrect === 'boolean';
+}
+
+/**
+ * Stored answers of several attempts, skipping any row that can't be read.
+ *
+ * The shape is checked, not only the JSON. `try/catch` alone lets `'null'` and `'{}'` through,
+ * and `Array.isArray` alone lets `'[null]'` through — that one throws on `answer.questionId`
+ * a level above any handler, and these reads run inside `void …then(…)` on a screen, so the
+ * failure would show as a table that silently stopped updating rather than as an error.
+ *
+ * A row is taken whole or not at all: a partially readable attempt would quietly change the
+ * denominators the diagnosis rests on, and „skipping the corrupted entry" is what the rest of
+ * the history being useful means here.
+ *
+ * Not covered by a unit test, and it can't be: anything importing this module pulls in
+ * expo-sqlite, whose Flow syntax vitest cannot parse. That is the reason the guard is inline
+ * and small rather than a shared helper somewhere testable.
+ */
+function parseAnswers(rows: readonly { answers: string }[]): AttemptAnswer[][] {
+  const parsed: AttemptAnswer[][] = [];
+  for (const row of rows) {
+    try {
+      const answers = JSON.parse(row.answers) as unknown;
+      if (Array.isArray(answers) && answers.every(isAnswer)) parsed.push(answers);
+    } catch {
+      // A corrupted entry is skipped — the rest of the history is still useful.
+    }
+  }
+  return parsed;
+}
+
 export async function missedQuestionIds(profile: ExamProfileId): Promise<string[]> {
   const database = await db();
   const rows = await database.getAllAsync<{ answers: string }>(
@@ -377,15 +427,55 @@ export async function missedQuestionIds(profile: ExamProfileId): Promise<string[
     [profile],
   );
 
-  const attempts: AttemptAnswer[][] = [];
-  for (const row of rows) {
-    try {
-      attempts.push(JSON.parse(row.answers) as AttemptAnswer[]);
-    } catch {
-      // A corrupted entry is skipped — the rest of the history is still useful.
-    }
+  return latestMisses(parseAnswers(rows));
+}
+
+/**
+ * How each question this profile has asked currently stands — see `latestVerdicts`.
+ *
+ * The whole profile, not one area: the question browser opens for one area at a time, but
+ * narrowing here would be a second rule about what belongs where, and the caller already holds
+ * the list of questions it is grouping.
+ */
+export async function examVerdicts(profile: ExamProfileId): Promise<Map<string, boolean>> {
+  const database = await db();
+  const rows = await database.getAllAsync<{ answers: string }>(
+    'SELECT answers FROM exam_attempts WHERE profile = ? ORDER BY finished_at DESC',
+    [profile],
+  );
+
+  return latestVerdicts(parseAnswers(rows));
+}
+
+/**
+ * The questions one subject area currently catches you on.
+ *
+ * Reads the same tally the diagnosis shows, so the drill behind "powtórz N" is exactly the N
+ * questions that number counts. Deliberately **not** "this profile's mistakes that happen to
+ * belong to the area": that was the earlier rule, and since a paper draws each question from
+ * one area only, it answered a different question than the counter beside it.
+ */
+export async function areaMistakes(profile: ExamProfileId, area: string): Promise<string[]> {
+  const { areas } = await areaStandings(profile);
+  return areas.get(area)?.missed ?? [];
+}
+
+/**
+ * The questions a practice plan names — the fetching half of `planPracticeSet`.
+ *
+ * Two of the three kinds of set live in this database rather than in the bundle, which is why
+ * the rule (`src/content/practiceSet.ts`) and the reading (here) are split: the rule has to be
+ * usable without the app, the reading needs a database.
+ */
+export async function questionsForPlan(
+  plan: PracticeSetPlan,
+  mode: PracticeMode,
+): Promise<Question[]> {
+  if (plan.kind === 'weak') return content.questionsByIds(await weakQuestionIds(mode));
+  if (plan.kind === 'mistakes') {
+    return content.questionsByIds(await areaMistakes(examProfile(plan.profile).id, plan.area));
   }
-  return latestMisses(attempts);
+  return content.questionsForSets([...plan.slugs]);
 }
 
 export async function resetAllProgress(): Promise<void> {
@@ -420,6 +510,31 @@ export interface AttemptAnswer {
   chosen: 'A' | 'B' | 'C' | null;
   wasCorrect: boolean;
   critical: boolean;
+}
+
+/**
+ * Per-area standing for one exam, plus how many attempts it rests on.
+ *
+ * Read through the same path as the mistake pool: this function does the reading, the rule
+ * lives in `areaProgress` and is tested without a database. **The whole history counts** —
+ * a question's area is derived from the content, so a paper drawn before the app knew about
+ * areas is as countable as today's.
+ */
+export async function areaStandings(
+  profile: ExamProfileId,
+): Promise<{ attempts: number; areas: Map<string, AreaTally> }> {
+  const database = await db();
+  const rows = await database.getAllAsync<{ answers: string }>(
+    'SELECT answers FROM exam_attempts WHERE profile = ? ORDER BY finished_at DESC',
+    [profile],
+  );
+
+  const parsed = parseAnswers(rows);
+
+  return {
+    attempts: parsed.length,
+    areas: areaProgress(parsed, (questionId) => content.areaOf(questionId)),
+  };
 }
 
 export interface AttemptDetail extends StoredAttempt {

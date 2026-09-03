@@ -20,18 +20,22 @@ import { ExamStrip } from '../../src/components/ExamStrip';
 import { positionLabel } from '../../src/content/answers';
 import { useBottomInset } from '../../src/components/safeArea';
 import { Button, Card, Muted } from '../../src/components/ui';
-import { profileMisses, profileQuestions } from '../../src/content/examPool';
+import { profileBands, profileMisses, profileQuestions } from '../../src/content/examPool';
+import { content } from '../../src/content/store';
 import type { Letter } from '../../src/content/types';
 import { missedQuestionIds, saveAttempt } from '../../src/db/database';
 import {
   type ExamProfile,
   type ExamQuestion,
   type ExamResult,
+  NotEnoughQuestionsError,
   buildPool,
+  criticalCount,
   drawExam,
   examProfile,
   formatRemaining,
   gradeExam,
+  profileAreas,
   solvingTime,
   unansweredNumbers,
 } from '../../src/engine/exam';
@@ -77,33 +81,66 @@ export default function ExamAttemptScreen() {
     let cancelled = false;
 
     void (async () => {
-      const base = profileQuestions(profile);
+      const fullBands = profileBands(profile);
       // The pool is drawn exclusively from exam mistakes. Flashcards, the ABC quiz and the
       // exam are three independent progress tracks — mixing in questions flagged as needing
       // work from practice mode would blend the measurement with the training and desync the
       // counter next to the button from what actually goes into the draw. `buildPool` stays
-      // in the mix because there can be fewer mistakes than the paper has questions, and none
-      // of them has to be critical.
+      // in the mix because the mistakes can be fewer than the paper needs, or all sitting in
+      // one subject area — it tops every layer up on its own.
       //
       // The mistakes come from this profile's own attempts and are then narrowed to its pool.
       // Sharing them across profiles was tried and reported as a bug: a question missed on the
       // licence exam surfaced under WPA whenever it sat on the course's WPA list, so a profile
       // with no attempts at all still offered an exam built from mistakes in it.
-      const questions = fromWeak
-        ? buildPool(profileMisses(await missedQuestionIds(profile.id), base), base, profile)
-        : base;
+      const bands = fromWeak
+        ? buildPool(
+            profileMisses(await missedQuestionIds(profile.id), profileQuestions(profile)),
+            fullBands,
+            profile,
+          )
+        : fullBands;
       if (cancelled) return;
 
+      const paper = drawExam(bands, profile);
       startedAt.current = Date.now();
       finished.current = false;
       setRemaining(profile.timeLimitSeconds);
-      setExam(drawExam(questions, profile));
-    })();
+      setExam(paper);
+    })().catch((error: unknown) => {
+      if (cancelled) return;
+      // Composing the paper can refuse: a layer whose set vanished from the bundle, or
+      // mistakes that leave an area with nothing to draw. Without this, the rejection escaped
+      // the async function unhandled — no error boundary sees that, so the screen sat on its
+      // spinner for good. The whole body is covered, not just the draw: a failed read of the
+      // mistake pool ended the same way.
+      const area
+        = error instanceof NotEnoughQuestionsError && error.category
+          ? content.titleForSets([error.category])
+          : null;
+      const reason = area
+        ? `W zagadnieniu „${area}" brakuje pytań na pełny arkusz.`
+        : 'Nie udało się przygotować pytań.';
+
+      Alert.alert(
+        'Nie można ułożyć arkusza',
+        fromWeak
+          ? `${reason} Spróbuj zwykłego egzaminu, bez ograniczenia do własnych pomyłek.`
+          : reason,
+        [{ text: 'Wróć', onPress: () => router.back() }],
+        // Dismissing this dialog would leave the same dead spinner it exists to replace.
+        { cancelable: false },
+      );
+    });
 
     return () => {
       cancelled = true;
     };
-  }, [fromWeak, profile]);
+    // Nothing that changes during an attempt may go in here: this effect draws the paper, so
+    // re-running it would swap the questions under the person answering them and restart the
+    // clock. `fromWeak` is a route flag, `profile` a module constant, and expo-router's
+    // `router` is a module singleton — none of them changes mid-attempt.
+  }, [fromWeak, profile, router]);
 
   const finish = useCallback(
     (answers: Map<string, Letter | null>) => {
@@ -256,6 +293,7 @@ export default function ExamAttemptScreen() {
       <ExamSummary
         result={result}
         profile={profile}
+        fromWeak={fromWeak}
         elapsed={finishedAt.current - startedAt.current}
         onClose={() => router.back()}
       />
@@ -397,11 +435,14 @@ export default function ExamAttemptScreen() {
 function ExamSummary({
   result,
   profile,
+  fromWeak,
   elapsed,
   onClose,
 }: {
   result: ExamResult;
   profile: ExamProfile;
+  /** Whether the paper was built from the mistake pool rather than drawn from the areas. */
+  fromWeak: boolean;
   /** Milliseconds the attempt took. */
   elapsed: number;
   onClose: () => void;
@@ -410,6 +451,14 @@ function ExamSummary({
   const paddingBottom = useBottomInset(32);
   const mistakes = result.answers.filter((answer) => !answer.wasCorrect);
   const correct = result.answers.filter((answer) => answer.wasCorrect);
+  /** Areas the mistakes came from, each named once. */
+  const weakAreas = [
+    ...new Set(
+      mistakes
+        .map((answer) => content.areaOf(answer.questionId))
+        .filter((slug): slug is string => slug !== undefined),
+    ),
+  ].map((slug) => content.titleForSets([slug]));
 
   // The summary replaces the screen without a navigation event, so a screen reader doesn't
   // read it on its own — and the verdict is the one thing the exam is taken for.
@@ -442,10 +491,19 @@ function ExamSummary({
         {result.failedOnCritical ? (
           <Text style={{ color: theme.critical, fontSize: 14 }}>
             Wynik wystarczał na zaliczenie (próg {profile.passThreshold}/{profile.questionCount}),
-            ale błąd padł w pierwszych {profile.criticalCount} pytaniach — to oznacza niezdanie.
+            ale błąd padł w pierwszych {criticalCount(profile)} pytaniach — to oznacza niezdanie.
           </Text>
         ) : null}
-        {result.passed ? <Muted>Taki wynik zalicza prawdziwy egzamin.</Muted> : null}
+        {/* Only about a paper drawn the way a real one is. An exam from the mistake pool
+            re-asks questions whose answers were on screen in the last summary, so the same
+            sentence there would promise something this result cannot support. */}
+        {result.passed && !fromWeak ? <Muted>Taki wynik zalicza prawdziwy egzamin.</Muted> : null}
+        {/* Which areas the mistakes fell in — one line, not a link on every card. The card
+            already carries the lesson and the legal basis, and the exam screen's own table of
+            areas is one tap away with more context than a single paper can give. */}
+        {weakAreas.length > 0 && weakAreas.length < profileAreas(profile).length ? (
+          <Muted>Błędy w zagadnieniach: {weakAreas.join(', ')}.</Muted>
+        ) : null}
         <Muted>Czas rozwiązywania: {solvingTime(elapsed)}</Muted>
       </Card>
 
