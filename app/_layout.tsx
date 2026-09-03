@@ -8,7 +8,8 @@ import { Button } from '../src/components/ui';
 import { HeaderTitle } from '../src/components/HeaderTitle';
 import { materializeContent } from '../src/content/materialize';
 import { SettingsProvider, useSettings } from '../src/settings/SettingsContext';
-import { lessonCss, useTheme } from '../src/theme';
+import { lessonCss } from '../src/content/lessonCss';
+import { useTheme } from '../src/theme';
 
 /**
  * Parent screen for link-based entries.

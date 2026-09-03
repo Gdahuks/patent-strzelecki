@@ -30,7 +30,8 @@ import { SCROLL_PROPS } from '../../src/content/webviewProps';
 import { jumpScript } from '../../src/content/jumpScript';
 import { parseReadingSample, readerPosition, readingScript } from '../../src/content/readingScript';
 import { loadActPosition, saveActPosition } from '../../src/db/reading';
-import { lessonCss, useTheme } from '../../src/theme';
+import { lessonCss } from '../../src/content/lessonCss';
+import { useTheme } from '../../src/theme';
 import { useSettings } from '../../src/settings/SettingsContext';
 
 export default function ActScreen() {
