@@ -322,6 +322,7 @@ icons-write: ## Generate and overwrite the full set of icons
 # make, read the line just above make's message, and checks.md.
 RELEASE_ENV = REPO='$(CURDIR)' TAG='$(TAG)' RELEASES_DIR='$(RELEASES_DIR)' \
   RELEASE_DIR='$(RELEASES_DIR)/$(TAG)' CONTENT_DIR='$(CONTENT_DIR)' SKIP_E2E='$(SKIP_E2E)' \
+  TAG_LOCAL='$(TAG_LOCAL)' \
   UPLOAD_KEYSTORE='$(UPLOAD_KEYSTORE)' UPLOAD_KEYCHAIN_ITEM='$(UPLOAD_KEYCHAIN_ITEM)'
 
 # The stage goals depend only on release-tag, so `make -j release` would start them at once;
@@ -331,12 +332,14 @@ RELEASE_ENV = REPO='$(CURDIR)' TAG='$(TAG)' RELEASES_DIR='$(RELEASES_DIR)' \
 release-tag:
 	@test -n '$(TAG)' || { printf 'Which tag? make release TAG=vX.Y.Z\n'; exit 2; }
 
-release: release-tag ## Store package from a tag: preflight, content, build, verify, summary
+# TAG_LOCAL=1 says the tag is deliberately not on origin yet: a release is built before it is
+# uploaded, and the tag is published after — see `tag_publication_state` in scripts/release/lib.sh.
+release: release-tag ## Store package from a tag: preflight, content, build, verify, summary (TAG_LOCAL=1 if the tag isn't pushed yet)
 	@test '$(SKIP_E2E)' = '1' || { \
 	  printf 'The e2e stage does not exist yet — run with SKIP_E2E=1.\n'; \
 	  printf 'The result is then marked as not verified end-to-end (see checks.md).\n'; exit 2; }
 	@$(MAKE) --no-print-directory release-preflight release-content release-build \
-	  release-verify release-summary TAG='$(TAG)' SKIP_E2E='$(SKIP_E2E)'
+	  release-verify release-summary TAG='$(TAG)' SKIP_E2E='$(SKIP_E2E)' TAG_LOCAL='$(TAG_LOCAL)'
 
 release-preflight: release-tag ## Release stage 1: tools, upload key, tag, bundletool, disk
 	@$(RELEASE_ENV) bash scripts/release/preflight.sh

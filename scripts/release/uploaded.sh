@@ -16,3 +16,12 @@ begin
 stage_done
 checks "Wgrane do Play: $(date '+%Y-%m-%d %H:%M')."
 log "marked $TAG as uploaded — the next release compares against it"
+
+# The package is in the store, so this is the moment the tag may go public — and the only
+# moment anyone will think of it. A release built with TAG_LOCAL=1 leaves the tag behind on
+# purpose; without a word here it would stay behind for good.
+remote_sha=$(git -C "$REPO" ls-remote --tags origin "refs/tags/$TAG" | awk '{ print $1 }')
+if [ -z "$remote_sha" ]; then
+  checks "Tag $TAG do wypchnięcia: \`git push origin $TAG\`."
+  log "next: git push origin $TAG — the tag is not on origin yet"
+fi

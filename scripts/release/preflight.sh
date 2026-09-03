@@ -111,8 +111,14 @@ if git -C "$REPO" rev-parse -q --verify "refs/tags/$TAG" > /dev/null; then
   else item bad "tag on main" "$TAG is not reachable from origin/main — a release must correspond to public code"; fi
   remote_sha=$(git -C "$REPO" ls-remote --tags origin "refs/tags/$TAG" | awk '{ print $1 }')
   local_sha=$(git -C "$REPO" rev-parse "refs/tags/$TAG")
-  if [ -n "$remote_sha" ] && [ "$remote_sha" = "$local_sha" ]; then item ok "tag on origin" "$remote_sha"
-  else item bad "tag on origin" "not on origin or different there (local $local_sha, origin ${remote_sha:-none}) — git push origin $TAG"; fi
+  tag_state=$(tag_publication_state "$local_sha" "$remote_sha")
+  case "$tag_state" in
+    published) item ok "tag on origin" "$remote_sha" ;;
+    # Deliberate: the tag is published after the package reaches Play, not before. Logged like
+    # the e2e flag — visible in the log, not counted as a failure.
+    withheld) log "tag on origin: withheld by flag (TAG_LOCAL=1) — push it after uploading" ;;
+    *) item bad "tag on origin" "not on origin or different there (local $local_sha, origin ${remote_sha:-none}) — git push origin $TAG, or run with TAG_LOCAL=1 to publish it after the upload" ;;
+  esac
 else
   item bad "tag exists" "no tag $TAG in $REPO"
 fi
@@ -175,7 +181,14 @@ meta_set skipE2e "${SKIP_E2E:-0}"
 
 checks "# Wydanie $TAG — $(date '+%Y-%m-%d %H:%M')"
 checks ""
-checks "Tag $TAG (podpisany, na origin/main), commit $tag_commit_short z $tag_commit_date."
+# The record has to say where the tag stands, because that is the one thing this release
+# cannot show by itself: a withheld tag means the version is not announced anywhere yet.
+case "${tag_state:-}" in
+  withheld) tag_note="podpisany, commit na origin/main; **tag jeszcze nie opublikowany** — do wypchnięcia po wgraniu do Play" ;;
+  published) tag_note="podpisany, na origin/main" ;;
+  *) tag_note="podpisany" ;;
+esac
+checks "Tag $TAG ($tag_note), commit $tag_commit_short z $tag_commit_date."
 checks "Pipeline z commita $pipeline_commit. Node $node_version, $java_version, bundletool $BUNDLETOOL_VERSION."
 checks "Oczekiwane: versionName ${TAG#v}, versionCode $expected_version_code."
 checks ""

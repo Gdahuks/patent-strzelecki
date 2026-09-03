@@ -498,6 +498,15 @@ root `package.json` — Metro would read it.
 through files there, and `make` reports any failing stage as exit 2 regardless of the script's
 own code — read the last line and `checks.md`.
 
+**A release is built before it is uploaded, and its tag is published after.** Preflight
+therefore accepts a tag that is not on `origin` only when told: `TAG_LOCAL=1`. The check that
+stays unconditional is the other one — the tag's *commit* has to be an ancestor of
+`origin/main`, so the package always corresponds to public code; withholding concerns the ref
+alone. `checks.md` says which of the two states this release was built in, and
+`make release-uploaded` prints the push command when the tag is still missing from `origin`,
+because that is the moment anyone will think of it. Pushing the tag earlier announces a version
+that has no artefact yet and may never pass the checks.
+
 ## Tests
 
 The spaced-repetition engine (`src/engine/leitner.ts`), the exam engine (`src/engine/exam.ts`),

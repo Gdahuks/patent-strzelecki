@@ -28,6 +28,34 @@ function freshDir() {
 }
 
 describe('lib.sh', () => {
+  it('calls a tag published when the ref on origin points at the same commit', () => {
+    const r = bash('begin; tag_publication_state abc123 abc123', freshDir());
+
+    assert.equal(r.status, 0);
+    assert.match(r.stdout, /^published$/m);
+  });
+
+  it('calls a missing tag withheld only when the flag says it is deliberate', () => {
+    // The release is built before it is uploaded and the tag is published after, so „not on
+    // origin" is a normal state — but only when someone said so.
+    const dir = freshDir();
+
+    assert.match(bash('begin; TAG_LOCAL=1 tag_publication_state abc123 ""', dir).stdout, /^withheld$/m);
+    assert.match(bash('begin; tag_publication_state abc123 ""', dir).stdout, /^missing$/m);
+  });
+
+  it('calls a tag missing when origin has it at another commit, flag or no flag', () => {
+    // A ref that disagrees with the local one is not a withheld tag, it is a tag someone else
+    // moved — the flag must not wave that through.
+    const dir = freshDir();
+
+    assert.match(bash('begin; tag_publication_state abc123 def456', dir).stdout, /^missing$/m);
+    assert.match(
+      bash('begin; TAG_LOCAL=1 tag_publication_state abc123 def456', dir).stdout,
+      /^missing$/m,
+    );
+  });
+
   it('log writes to the terminal and to release.log with a timestamp and the stage', () => {
     const dir = freshDir();
     const r = bash('begin; log hello', dir);

@@ -114,6 +114,31 @@ ask() {
   esac
 }
 
+# tag_publication_state LOCAL_SHA REMOTE_SHA — where the tag stands, as one word:
+#
+#   published  the ref is on origin and points at the same commit
+#   withheld   it is not there and TAG_LOCAL=1 says that is deliberate
+#   missing    it is not there (or differs) and nobody said so
+#
+# The pipeline needs the difference because a release is built **before** it is uploaded, and
+# the tag is published **after** — pushing it earlier would announce a version that has no
+# artefact yet and may never pass the checks. What must stay unconditional is the other check:
+# the tag's *commit* has to be an ancestor of origin/main, so the package always corresponds to
+# public code. This is only about the ref.
+tag_publication_state() {
+  local local_sha=$1 remote_sha=${2:-}
+  if [ -n "$remote_sha" ] && [ "$remote_sha" = "$local_sha" ]; then
+    printf 'published\n'
+  # Only an **absent** ref can be withheld. A ref that disagrees with the local one is not a
+  # tag waiting to be published, it is a tag someone moved — the flag must not wave that
+  # through, whatever it was set for.
+  elif [ -z "$remote_sha" ] && [ "${TAG_LOCAL:-}" = 1 ]; then
+    printf 'withheld\n'
+  else
+    printf 'missing\n'
+  fi
+}
+
 stage_done() {
   mkdir -p "$STAGE_DIR"
   date -u '+%Y-%m-%dT%H:%M:%SZ' > "$STAGE_DIR/$STAGE"
