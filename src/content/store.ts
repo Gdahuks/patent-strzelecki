@@ -34,7 +34,7 @@ const setsBySlug = new Map(bundle.sets.map((set) => [set.slug, set]));
  */
 const areaByQuestion: Map<string, string> = partitionQuestions(
   new Map(bundle.sets.map((set) => [set.slug, set.questionIds])),
-  bundle.questions.map((question) => question.id),
+  bundle.questions,
 );
 
 /**

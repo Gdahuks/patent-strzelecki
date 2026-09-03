@@ -4,7 +4,7 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { beforeAll, describe, it } from 'vitest';
 
-import { ALL_SET_SLUG, CATEGORIES } from './categories';
+import { ALL_SET_SLUG, CATEGORIES, lawArticle, namesForeignSource } from './categories';
 import type { ContentBundle } from './types';
 import { PATENT_PROFILE, WPA_PROFILE } from '../engine/exam';
 
@@ -72,51 +72,96 @@ describe.skipIf(!PRESENT)('subject areas on the real bundle', () => {
     }).map((category) => category.slug);
   }
 
-  it('leaves no question outside the exam except the police set', () => {
+  it('leaves no question outside the exam except the police set and foreign subjects', () => {
     // The one that would break silently: a question in no area is a question the paper can
-    // never ask, and nothing on screen would say so.
+    // never ask, and nothing on screen would say so. Two groups are outside on purpose — the
+    // police list, and the handful whose basis names a source no § 19 area covers.
     const orphans = content.questions
       .filter((question) => !wpa.has(question.id) && store.areaOf(question.id) === undefined)
-      .map((question) => question.id);
+      .map((question) => ({ id: question.id, law: question.law ?? '' }));
 
-    assert.deepEqual(orphans, []);
+    for (const orphan of orphans) {
+      assert.ok(
+        namesForeignSource(orphan.law),
+        `${orphan.id} jest poza zagadnieniami, a jego podstawa to ${orphan.law || '‹brak›'}`,
+      );
+    }
+    assert.equal(orphans.length, 3, 'poza egzaminem: opłata skarbowa ×2 i termin z KPA');
   });
 
   it('gives every question exactly one area', () => {
     // The partition is the whole model: the paper draws a slot from one area and the
-    // diagnosis counts the answer in one row, so those two can never disagree. Asserted
-    // against the resolution the app actually uses, not against a copy of the rule.
+    // diagnosis counts the answer in one row, so those two can never disagree.
     for (const question of content.questions) {
       const area = store.areaOf(question.id);
       if (area === undefined) continue;
-      assert.equal(
-        store.questionsForSets([area]).some((entry) => entry.id === question.id),
-        true,
-        question.id,
+      const holders = CATEGORIES.filter((category) =>
+        store.questionsForSets([category.slug]).some((entry) => entry.id === question.id),
       );
-      const others = CATEGORIES.filter(
-        (category) =>
-          category.slug !== area
-          && store.questionsForSets([category.slug]).some((entry) => entry.id === question.id),
-      );
-      assert.deepEqual(others, [], question.id);
+      assert.deepEqual(holders.map((category) => category.slug), [area], question.id);
     }
   });
 
-  it('resolves the double-filed questions in favour of the narrower area', () => {
-    // The course files the Act's own sanctions — art. 51 and art. 18 ust. 5 — under both
-    // "UoBiA" and "Prawo karne". Any *other* pair of sets claiming the same question means
-    // the course regrouped and the map needs revisiting, since the general flag would then be
-    // silently deciding something nobody looked at.
-    const contested = content.questions
-      .map((question) => ({ id: question.id, areas: claimedBy(question.id) }))
-      .filter((entry) => entry.areas.length > 1);
+  it('splits the double-filed questions by the article they cite', () => {
+    // The course files 43 questions under both "UoBiA" and "Prawo karne", and they are two
+    // different things: the Act's own penal chapter, and the permit regime of the same Act.
+    // Deciding by the set's name kept obligations of a licence holder out of the opening four.
+    const contested = content.questions.filter((question) => claimedBy(question.id).length > 1);
+    const penal = contested.filter((question) =>
+      ['49', '49a', '50', '51', '51a'].includes(lawArticle(question.law ?? '') ?? ''),
+    );
 
-    for (const entry of contested) {
-      assert.deepEqual([...entry.areas].sort(), ['zg-prawo-karne', 'zg-uobia'], entry.id);
-      assert.equal(store.areaOf(entry.id), 'zg-prawo-karne', entry.id);
-    }
     assert.equal(contested.length, 43);
+    // Comparing bare article numbers only means something while every contested basis names
+    // the Act — the rule checks the act too, and this is what keeps the assertion honest.
+    for (const question of contested) {
+      assert.ok(
+        (question.law ?? '').trimStart().startsWith('UoBiA'),
+        `sporne pytanie cytuje inny akt: „${question.law}" (${question.id})`,
+      );
+    }
+    assert.equal(penal.length, 24, 'art. 50 i 51 — rozdział „Przepisy karne"');
+    for (const question of penal) {
+      assert.equal(store.areaOf(question.id), 'zg-prawo-karne', question.id);
+    }
+    for (const question of contested.filter((entry) => !penal.includes(entry))) {
+      assert.equal(store.areaOf(question.id), 'zg-uobia', question.id);
+    }
+  });
+
+  it('recognises where every question that can open the paper comes from', () => {
+    // The exclusion rule only knows the sources it is told about, so a content refresh could
+    // bring a new one into the group where a single mistake fails the paper. This turns the
+    // question around: every basis in the critical pool has to start with something on this
+    // list, so an unrecognised one fails the build with its own text and becomes a decision.
+    //
+    // Prefixes, not normalised names: the course writes a basis in whatever shape it likes
+    // („UoBiA - Art. 18, ust. 6", „§2 ust. 1 rozporządzenia w sprawie przewożenia…"), and
+    // three attempts at a general normaliser were worse than reading the first word. The
+    // author's note is on the list on purpose — it is known, and the question under it is
+    // about storing ammunition in an S1 cabinet, which belongs here.
+    // Only prefixes that are actually there. `KK`, `§` and a lowercase `rozporządzenie` were
+    // on this list and appear nowhere in the critical pool — a dead entry is worse than a
+    // missing one, because it pre-approves a source nobody has looked at.
+    const accepted = [
+      'UoBiA',
+      'Rozporządzenie',
+      'Ogólne zasady bezpieczeństwa',
+      'Pytanie jest POPRAWNE',
+    ];
+    const critical = PATENT_PROFILE.layers
+      .filter((layer) => layer.critical)
+      .flatMap((layer) => layer.sources.map((source) => source.category));
+
+    for (const slug of critical) {
+      for (const question of store.questionsForSets([slug])) {
+        const law = (question.law ?? '').trimStart();
+        assert.ok(
+          law === '' || accepted.some((prefix) => law.startsWith(prefix)),
+          `nieznane źródło w puli krytycznej: „${law}" (${question.id})`,
+        );
+      }
+    }
   });
 
   it('keeps the police set out of the licence exam', () => {
@@ -137,11 +182,11 @@ describe.skipIf(!PRESENT)('subject areas on the real bundle', () => {
     assert.deepEqual(
       [...sizes],
       [
-        ['zg-uobia', 252],
+        ['zg-uobia', 268],
         ['zg-bezpieczenstwo', 24],
         ['zg-regulaminy', 36],
         ['zg-budowa', 84],
-        ['zg-prawo-karne', 60],
+        ['zg-prawo-karne', 41],
       ],
       advice,
     );
@@ -149,7 +194,7 @@ describe.skipIf(!PRESENT)('subject areas on the real bundle', () => {
     const inAreas = content.questions.filter(
       (question) => store.areaOf(question.id) !== undefined,
     );
-    assert.equal(inAreas.length, 456, `pula patentowa: ${inAreas.length} — ${advice}`);
+    assert.equal(inAreas.length, 453, `pula patentowa: ${inAreas.length} — ${advice}`);
     assert.equal(
       [...sizes.values()].reduce((sum, size) => sum + size, 0),
       inAreas.length,

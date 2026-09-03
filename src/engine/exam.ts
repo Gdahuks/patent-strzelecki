@@ -45,8 +45,8 @@ export interface ExamSource {
  * `critical` marks the zero-tolerance group, and it is a property of the **band**, not of the
  * question: an earlier version derived it from the question's lesson, and since 163 of the 200
  * police-exam questions carry the lesson `uobia`, they kept landing in the group where a
- * single mistake fails the paper — while safety questions, 24 against a critical pool of 415,
- * were missing from it in 79% of papers.
+ * single mistake fails the paper — while safety questions, 24 of them against everything the
+ * lesson `uobia` pulled in, were missing from that group in 79% of papers.
  */
 export interface ExamLayer {
   sources: readonly ExamSource[];
@@ -291,7 +291,7 @@ export interface AreaTally {
  * questions can show "23/24" off six questions answered four times each, which reads as
  * mastery of the area and isn't.
  *
- * `seen` is therefore also a coverage figure — "34/41" against an area of 252 questions says
+ * `seen` is therefore also a coverage figure — "34/41" against an area of 268 questions says
  * plainly that most of it hasn't been asked yet.
  *
  * The area comes from the resolver, never from the attempt: areas are a partition of the

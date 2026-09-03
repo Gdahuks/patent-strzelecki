@@ -541,11 +541,30 @@ police (WPA) list, 0.45 from the safety rules and 0.33 from the range regulation
 of papers had no safety question in the group where a single mistake fails you. The course
 describes the 2×5 rule on its own page and doesn't implement it; the app does, bar the opening
 four. The areas are sums of the course's own sets, declared in `src/content/categories.ts`,
-and they are a **partition**: every question belongs to exactly one area, or to none (the 200 police-exam
-questions). Where the course files a question in two — 43 questions are the Act's own sanctions,
-art. 51 and art. 18 ust. 5, filed under both "UoBiA" and "Prawo karne" — the narrower area wins
-it, which is what the `general` flag on area 1 means. Their user-facing names follow what is
-inside rather than the regulation's wording, and the reason is written down next to each one.
+and they are a **partition**: every question belongs to exactly one area, or to none. Their
+user-facing names follow what is inside rather than the regulation's wording, and the reason is
+written down next to each one. Sizes: 268 / 24 / 36 / 84 / 41, i.e. 453 of the bundle's 656 —
+200 are the police list and 3 are subjects no area covers.
+
+**Three things decide the partition, in this order.** A question the course filed under a
+thematic set stays there; we do not second-guess its classification. A question it filed
+**twice** is settled by the article its basis cites, not by the set's name: the course puts 43
+questions under both "UoBiA" and "Prawo karne", and they are two different things — 24 cite
+art. 50 and 51, the Act's own chapter of penal provisions, while 19 cite art. 18, cofnięcie
+pozwolenia, which is the permit regime of the same Act. Deciding by the name sent all 43 to
+penal law, so a licence holder's own obligations could never appear in the opening four, where
+a mistake fails the paper. The articles an area claims are declared as `ownsArticles`. A
+question the course filed **nowhere** goes to the Act (`general` plus `includeUnassigned`)
+unless its basis names a source outside § 19 — `FOREIGN_SOURCES`, today the stamp duty on a
+promesa and a deadline from the KPA. Those three can open no paper; they stay reachable through
+the umbrella set and search.
+
+The exclusion works on **recognised sources**, never on "does this look like a citation": one
+question carries the course author's note where a basis belongs ("Pytanie jest POPRAWNE, serio.
+Nie pisz mi o nim.") and is about storing ammunition in an S1 cabinet, which belongs in the
+pool. So `categories.package.test.ts` checks the other direction — every basis in the critical
+pool must start with something on a frozen list, and an unrecognised source fails the build
+instead of quietly entering the exam.
 
 **The exam screen carries the per-area standing, and that is where the areas belong.** They
 answer "what am I worst at", which is diagnosis, not browsing — a second switch over the

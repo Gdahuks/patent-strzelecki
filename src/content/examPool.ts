@@ -39,7 +39,7 @@ export function profileQuestions(profile: ExamProfile): Question[] {
  * Whether this build's bundle can actually serve the profile.
  *
  * Answered by composing one paper and seeing whether it holds — not by counting. A pool of
- * 456 says nothing when one area lost its set, and counting per band is not enough either:
+ * 453 says nothing when one area lost its set, and counting per band is not enough either:
  * the areas overlap, so an earlier band can take away everything a later one had. Two areas
  * of two questions each, holding the same two questions, pass every arithmetic check and
  * still cannot make a paper.
