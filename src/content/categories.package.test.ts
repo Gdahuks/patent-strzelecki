@@ -2,11 +2,9 @@ import assert from 'node:assert/strict';
 import { existsSync, readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { describe, it } from 'vitest';
+import { beforeAll, describe, it } from 'vitest';
 
 import { ALL_SET_SLUG, CATEGORIES } from './categories';
-import { profileAvailable, profileBands } from './examPool';
-import { content as store } from './store';
 import type { ContentBundle } from './types';
 import { PATENT_PROFILE, WPA_PROFILE } from '../engine/exam';
 
@@ -35,15 +33,36 @@ function idsOf(slugs: readonly string[], sets: ContentBundle['sets']): Set<strin
   return new Set(slugs.flatMap((slug) => byslug.get(slug)?.questionIds ?? []));
 }
 
+/**
+ * Everything this suite reads is loaded in `beforeAll`, nothing at the top of the file and
+ * nothing in the body of `describe`.
+ *
+ * Both would run where the bundle is absent — a top-level import of the store throws as the
+ * module graph is built (the store requires the bundle), and a `describe` body runs during
+ * collection even for a suite that `skipIf` will skip. A fresh clone and CI are exactly that
+ * case, so the loads have to sit in a hook, which runs only for a suite that isn't skipped.
+ */
+let store: typeof import('./store').content;
+let profileBands: typeof import('./examPool').profileBands;
+let profileAvailable: typeof import('./examPool').profileAvailable;
+let content: ContentBundle;
+let unassigned: string[];
+let wpa: Set<string>;
+
 describe.skipIf(!PRESENT)('subject areas on the real bundle', () => {
-  const content = bundle();
-  const assigned = new Set(
-    content.sets.filter((set) => set.slug !== ALL_SET_SLUG).flatMap((set) => set.questionIds),
-  );
-  const unassigned = content.questions
-    .filter((question) => !assigned.has(question.id))
-    .map((question) => question.id);
-  const wpa = idsOf([WPA_SET_SLUG], content.sets);
+  beforeAll(async () => {
+    store = (await import('./store')).content;
+    ({ profileBands, profileAvailable } = await import('./examPool'));
+
+    content = bundle();
+    const assigned = new Set(
+      content.sets.filter((set) => set.slug !== ALL_SET_SLUG).flatMap((set) => set.questionIds),
+    );
+    unassigned = content.questions
+      .filter((question) => !assigned.has(question.id))
+      .map((question) => question.id);
+    wpa = idsOf([WPA_SET_SLUG], content.sets);
+  });
 
   /** Areas whose *sets* claim a question, before the general area yields it. */
   function claimedBy(id: string): string[] {
