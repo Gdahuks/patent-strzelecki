@@ -384,20 +384,35 @@ export async function weakQuestionIds(mode: PracticeMode, maxBucket = 0): Promis
  * The cost is deliberate: the same question can need fixing separately in each exam. That's
  * how flashcards and the ABC quiz already work — separate tracks, separate counters.
  */
+/** Whether a parsed entry carries the two fields every reader of an attempt touches. */
+function isAnswer(value: unknown): value is AttemptAnswer {
+  if (typeof value !== 'object' || value === null) return false;
+  const answer = value as Partial<AttemptAnswer>;
+  return typeof answer.questionId === 'string' && typeof answer.wasCorrect === 'boolean';
+}
+
 /**
  * Stored answers of several attempts, skipping any row that can't be read.
  *
- * `Array.isArray` and not only `try/catch`: `JSON.parse('null')` and `'{}'` both succeed and
- * then throw where the array is iterated, one level up from any handler — and these reads run
- * inside `void …then(…)` on a screen, so the failure would show as a table that silently
- * stopped updating.
+ * The shape is checked, not only the JSON. `try/catch` alone lets `'null'` and `'{}'` through,
+ * and `Array.isArray` alone lets `'[null]'` through — that one throws on `answer.questionId`
+ * a level above any handler, and these reads run inside `void …then(…)` on a screen, so the
+ * failure would show as a table that silently stopped updating rather than as an error.
+ *
+ * A row is taken whole or not at all: a partially readable attempt would quietly change the
+ * denominators the diagnosis rests on, and „skipping the corrupted entry" is what the rest of
+ * the history being useful means here.
+ *
+ * Not covered by a unit test, and it can't be: anything importing this module pulls in
+ * expo-sqlite, whose Flow syntax vitest cannot parse. That is the reason the guard is inline
+ * and small rather than a shared helper somewhere testable.
  */
 function parseAnswers(rows: readonly { answers: string }[]): AttemptAnswer[][] {
   const parsed: AttemptAnswer[][] = [];
   for (const row of rows) {
     try {
       const answers = JSON.parse(row.answers) as unknown;
-      if (Array.isArray(answers)) parsed.push(answers as AttemptAnswer[]);
+      if (Array.isArray(answers) && answers.every(isAnswer)) parsed.push(answers);
     } catch {
       // A corrupted entry is skipped — the rest of the history is still useful.
     }
