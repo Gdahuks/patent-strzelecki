@@ -58,6 +58,22 @@ export interface Category {
    */
   general?: true;
   /**
+   * Articles of the Act whose questions this area owns when the course files them twice.
+   *
+   * The course puts 43 questions in both "UoBiA całość" and "Prawo karne", and they are two
+   * different things: 24 cite art. 50 and 51, the Act's own chapter of penal provisions
+   * (rozdział 7, art. 49-51a), while 19 cite art. 18 — cofnięcie pozwolenia i dopuszczenia,
+   * which is the permit regime of the Act itself and not penal law at all. Deciding by the
+   * set's name sent all 43 here, so obligations of a licence holder could never appear in the
+   * opening four, where a mistake fails the paper — and that is exactly what the exam is
+   * entitled to fail someone on.
+   *
+   * So for a contested question the **cited article decides**, not the set's name: an article
+   * on this list keeps the question here, any other hands it back to the general area. The
+   * list is the statute's own structure, which is why it is stable across amendments.
+   */
+  ownsArticles?: readonly string[];
+  /**
    * Whether questions belonging to no thematic set land here.
    *
    * Exactly one area carries this. 55 questions in the bundle belong to no set other than
@@ -122,11 +138,49 @@ export const CATEGORIES: readonly Category[] = [
   {
     slug: 'zg-prawo-karne',
     // Both course sets in the name: "Prawo karne" alone is also the name of one of them, and
-    // it has 49 questions against this area's 60 — same name, different number.
+    // it has 49 questions against this area's 41 — same name, different number.
     title: 'Prawo karne i obrona konieczna',
     setSlugs: ['prawo-karne', 'obrona-konieczna'],
+    // Rozdział 7 UoBiA, "Przepisy karne" — art. 49, 49a, 50, 51, 51a. See `ownsArticles`.
+    ownsArticles: ['49', '49a', '50', '51', '51a'],
   },
 ];
+
+/**
+ * Sources of law that no § 19 area covers.
+ *
+ * A question the course files under no thematic set lands in the general area (see
+ * `includeUnassigned`) — the rule that keeps every question reachable in an exam. It says
+ * nothing about *what* the question is about, and three questions in the bundle are about
+ * neither the Act nor anything issued under it: the stamp duty on a promesa (twice) and a
+ * registration deadline falling on a Saturday, which is the administrative procedure code.
+ * They could open the paper as one of the four questions a single mistake fails you on.
+ *
+ * **Recognised sources, not a shape test.** The rule excludes what it can name, and nothing
+ * else: one question carries the course author's note where a citation belongs ("Pytanie jest
+ * POPRAWNE, serio. Nie pisz mi o nim.") and is about storing ammunition in an S1 cabinet — a
+ * rule of the form "the basis has to look like a citation" would throw that out with the stamp
+ * duty. The note stays as it is; `categories.package.test.ts` freezes the list of sources that
+ * appear in the critical pool, so a source nobody has looked at fails the build instead of
+ * quietly entering the exam.
+ */
+export const FOREIGN_SOURCES: readonly string[] = [
+  'Wykaz przedmiotów opłaty skarbowej',
+  'KPA',
+];
+
+/** Whether a legal basis names a source that no § 19 area covers — see `FOREIGN_SOURCES`. */
+export function namesForeignSource(law: string): boolean {
+  const text = law.trimStart();
+  return FOREIGN_SOURCES.some((source) => text.startsWith(source));
+}
+
+/**
+ * The first article a legal basis cites, without its unit — `18` from `UoBiA - Art. 18, ust. 6`.
+ */
+export function lawArticle(law: string): string | undefined {
+  return /Art\.?\s*(\d+[a-z]?)/.exec(law)?.[1];
+}
 
 /**
  * The course's umbrella set, which says nothing about a question's subject.
@@ -154,7 +208,7 @@ export const ALL_SET_SLUG = 'wszystkie';
  */
 export function partitionQuestions(
   setMembers: ReadonlyMap<string, readonly string[]>,
-  questionIds: readonly string[],
+  questions: readonly { id: string; law?: string }[],
   categories: readonly Category[] = CATEGORIES,
 ): Map<string, string> {
   const thematic = new Set<string>();
@@ -162,8 +216,8 @@ export function partitionQuestions(
     if (slug === ALL_SET_SLUG) continue;
     for (const id of ids) thematic.add(id);
   }
-  const unassigned = questionIds.filter((id) => !thematic.has(id));
-  const known = new Set(questionIds);
+  const law = new Map(questions.map((question) => [question.id, question.law ?? '']));
+  const unassigned = questions.map((q) => q.id).filter((id) => !thematic.has(id));
 
   const claimedBy = (entry: Category): string[] => {
     // A set naming a question the bundle doesn't carry would otherwise get an area, be counted
@@ -171,8 +225,13 @@ export function partitionQuestions(
     // questions, leaving "Powtórz 3" over two cards.
     const ids = entry.setSlugs
       .flatMap((slug) => setMembers.get(slug) ?? [])
-      .filter((id) => known.has(id));
-    return entry.includeUnassigned ? [...ids, ...unassigned] : ids;
+      .filter((id) => law.has(id));
+    if (!entry.includeUnassigned) return ids;
+
+    // The catch-all takes what the course left unfiled, minus the subjects no § 19 area
+    // covers — see `FOREIGN_SOURCES`.
+    const own = unassigned.filter((id) => !namesForeignSource(law.get(id) ?? ''));
+    return [...ids, ...own];
   };
 
   const areas = new Map<string, string>();
@@ -182,7 +241,20 @@ export function partitionQuestions(
   }
   for (const entry of categories) {
     if (!entry.general) continue;
-    for (const id of claimedBy(entry)) if (!areas.has(id)) areas.set(id, entry.slug);
+    for (const id of claimedBy(entry)) {
+      const taken = areas.get(id);
+      if (taken === undefined) {
+        areas.set(id, entry.slug);
+        continue;
+      }
+      // The narrower area has it, but it may not be entitled to: where that area names the
+      // articles it owns, a question citing anything else belongs to the general one.
+      const owner = categories.find((candidate) => candidate.slug === taken);
+      if (!owner?.ownsArticles) continue;
+      const article = lawArticle(law.get(id) ?? '');
+      if (article === undefined || owner.ownsArticles.includes(article)) continue;
+      areas.set(id, entry.slug);
+    }
   }
   return areas;
 }
