@@ -64,3 +64,79 @@ describe('jumpScript', () => {
     assert.match(script, /true;\s*\}\)\(\);\s*$/);
   });
 });
+
+/**
+ * The smallest document the walk needs: two articles, each with its own `pass_5`, and a
+ * point inside the second one. Both `pass_5`s are what the collision is about — a search
+ * across the whole document finds the one in art. 1.
+ *
+ * `onReach` fires when the script measures a unit, which is how the walk reports where it
+ * landed without the test reaching into the script's internals.
+ */
+function fakeDocument(onReach: (where: string) => void) {
+  type Node = { id: string; where: string; children: Node[] };
+  // `where` is the full position in the tree, and it is what the test asserts on: two
+  // articles hold a `pass_5` **and** a `pint_6`, so an id alone could not say which copy
+  // the walk reached — and a walk that stopped narrowing would still look correct.
+  const unit = (id: string, ...children: Node[]): Node => ({ id, where: id, children });
+  const nest = (node: Node, prefix = ''): Node => {
+    const where = prefix ? `${prefix}>${node.id}` : node.id;
+    return { ...node, where, children: node.children.map((child) => nest(child, where)) };
+  };
+  const tree = [
+    unit('arti_1', unit('pass_5', unit('pint_6'))),
+    unit('arti_18', unit('pass_5', unit('pint_6')), unit('pass_9')),
+  ].map((node) => nest(node));
+
+  const descendants = (nodes: Node[]): Node[] =>
+    nodes.flatMap((node) => [node, ...descendants(node.children)]);
+
+  const wrap = (node: Node) => ({
+    getAttribute: (name: string) => (name === 'data-id' ? node.id : null),
+    querySelectorAll: () => descendants(node.children).map(wrap),
+    getBoundingClientRect: () => {
+      onReach(node.where);
+      return { top: 0 };
+    },
+    scrollIntoView: () => {},
+  });
+
+  return {
+    querySelectorAll: () => descendants(tree).map(wrap),
+    body: { scrollHeight: 1000 },
+  };
+}
+
+/** Runs the generated script against the fake document and reports where it landed. */
+function landsOn(ref: string): string | null {
+  let hit: string | null = null;
+  const document = fakeDocument((id) => {
+    hit = id;
+  });
+  const window = {
+    scrollY: 0,
+    addEventListener: () => {},
+    __psJump: 0,
+    __psJumpTouch: false,
+  };
+  new Function('document', 'window', 'setTimeout', jumpScript(ref))(document, window, () => 0);
+  return hit;
+}
+
+describe('jumpScript: walking the path', () => {
+  it('resolves a repeated identifier inside the article that owns it', () => {
+    // `pass_5` exists in both articles; the path is what tells them apart.
+    assert.equal(landsOn('arti_18/pass_5/pint_6'), 'arti_18>pass_5>pint_6');
+    assert.equal(landsOn('arti_1/pass_5'), 'arti_1>pass_5');
+  });
+
+  it('stops at the deepest step the document has', () => {
+    // A renumbered point in a newer bundle still lands the reader on the right paragraph.
+    assert.equal(landsOn('arti_18/pass_9/pint_3'), 'arti_18>pass_9');
+    assert.equal(landsOn('arti_18'), 'arti_18');
+  });
+
+  it('lands nowhere when the leading step is missing', () => {
+    assert.equal(landsOn('arti_99/pass_5'), null);
+  });
+});
