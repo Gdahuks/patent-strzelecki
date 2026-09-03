@@ -4,15 +4,28 @@ import { describe, it } from 'vitest';
 import { JUMP_DEADLINE_MS, JUMP_TICK_MS, jumpScript } from './jumpScript';
 
 describe('jumpScript', () => {
-  it('embeds the unit as a JS string literal, so any ref is safe in the selector', () => {
-    // A ref starting with a digit or containing a dot broke `querySelector` when it was
+  it('embeds the steps as JS string literals, so any ref is safe in the selector', () => {
+    // A step starting with a digit or containing a dot broke `querySelector` when it was
     // pasted into a selector; comparing `data-id` values needs no selector syntax at all.
     const script = jumpScript('1.arti-4]');
 
-    assert.match(script, /var want = "1\.arti-4\]";/);
-    // Guards against `want` being spliced into a selector on the same line; a multi-line
+    assert.match(script, /var path = \["1\.arti-4\]"\];/);
+    // Guards against a step being spliced into a selector on the same line; a multi-line
     // splice would slip past `.` — good enough for a shape check, not a full fence.
-    assert.doesNotMatch(script, /querySelector\(.*want/);
+    assert.doesNotMatch(script, /querySelector\(.*path\[/);
+  });
+
+  it('walks a path step by step, each one inside the last', () => {
+    // Identifiers below an article repeat across the document — the firearms act has fifty
+    // `pass_1` — so „art. 18 ust. 5 pkt 6" can only be found by descending through arti_18.
+    const script = jumpScript('arti_18/pass_5/pint_6');
+
+    assert.match(script, /var path = \["arti_18","pass_5","pint_6"\];/);
+    // The search narrows to the step found last, instead of restarting from the document.
+    assert.match(script, /scope\.querySelectorAll\('\[data-id\]'\)/);
+    assert.match(script, /scope = step;/);
+    // A step the document doesn't have stops the walk, leaving the deepest one found.
+    assert.match(script, /if \(!step\) break;/);
   });
 
   it('keeps trying until the unit sits at the top and the page has stopped growing', () => {

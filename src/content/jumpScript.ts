@@ -26,16 +26,25 @@ export const JUMP_TICK_MS = 100;
  * sees it and quits, so two taps in the unit list within two seconds don't fight over the
  * page. The reader's first touch bumps the same token, which ends the current loop.
  *
+ * The ref is a **path** — `arti_18/pass_5/pint_6` — and each step is searched **inside** the
+ * one before it, never across the whole document. Identifiers below an article repeat: the
+ * firearms act alone has fifty `pass_1` and forty-nine `pint_1`, so a document-wide search
+ * for `pass_5` would land in art. 1. A step that the document doesn't have stops the walk
+ * and the deepest step found so far wins — a bundle where a point has been renumbered still
+ * takes the reader to the right paragraph instead of to the top of the act.
+ *
  * `ref` comes from a route parameter, and the route is also reachable through a deep link
  * (`patentstrzelecki://act/uobia?ref=…`) — a value from outside the app. It goes through
  * `JSON.stringify`: inserted raw, it could close the string early and let arbitrary code run
- * inside the WebView. The unit is then matched by comparing `data-id` values, never by
- * pasting the ref into a selector: a ref starting with a digit, or containing a dot or a
+ * inside the WebView. The steps are then matched by comparing `data-id` values, never by
+ * pasting them into a selector: a step starting with a digit, or containing a dot or a
  * `]`, made `querySelector` throw and aborted the whole function.
  */
 export function jumpScript(ref: string): string {
+  const path = ref.split('/').filter((step) => step.length > 0);
+
   return `(function () {
-  var want = ${JSON.stringify(ref)};
+  var path = ${JSON.stringify(path)};
   var token = (window.__psJump = (window.__psJump || 0) + 1);
   if (!window.__psJumpTouch) {
     window.__psJumpTouch = true;
@@ -46,11 +55,19 @@ export function jumpScript(ref: string): string {
   var lastY = -1;
   var quiet = 0;
   function target() {
-    var units = document.querySelectorAll('[data-id]');
-    for (var i = 0; i < units.length; i += 1) {
-      if (units[i].getAttribute('data-id') === want) return units[i];
+    var scope = document;
+    var found = null;
+    for (var s = 0; s < path.length; s += 1) {
+      var units = scope.querySelectorAll('[data-id]');
+      var step = null;
+      for (var i = 0; i < units.length; i += 1) {
+        if (units[i].getAttribute('data-id') === path[s]) { step = units[i]; break; }
+      }
+      if (!step) break;
+      found = step;
+      scope = step;
     }
-    return null;
+    return found;
   }
   function settle() {
     if (token !== window.__psJump) return;

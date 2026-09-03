@@ -317,6 +317,18 @@ export function sourceName(law: string, act: Act): string | null {
 }
 
 /**
+ * The steps below the top unit, in the order they nest in a document: a paragraph, then a
+ * point inside it, then a letter inside that. The § is missing here on purpose — it is
+ * either the top unit of a regulation or an article's subunit, and both cases are decided
+ * in `resolveLaw`, where it is known whether an article came first.
+ */
+const SUBUNITS: { pattern: RegExp; prefix: string }[] = [
+  { pattern: /\bust\.?\s*(\d+[a-z]?)/i, prefix: 'pass' },
+  { pattern: /\bpkt\.?\s*(\d+[a-z]?)/i, prefix: 'pint' },
+  { pattern: /\blit\.?\s*([a-z])/i, prefix: 'lett' },
+];
+
+/**
  * Translates a question's legal basis into an act and a unit.
  *
  * The course writes it loosely: "UoBiA - Art. 15 ust. 2", "KK - Art. 263, § 2",
@@ -364,12 +376,33 @@ export function resolveLaw(law: string, acts: Act[] = allActs()): LawTarget | nu
   const article = /\bart\.?\s*(\d+[a-z]?)/i.exec(text);
   const paragraph = /§\s*(\d+[a-z]?)/.exec(text);
 
-  let ref: string | null = null;
-  if (article) ref = `arti_${article[1].toLowerCase()}`;
-  else if (paragraph) ref = `para_${paragraph[1].toLowerCase()}`;
+  const steps: string[] = [];
+  if (article) {
+    steps.push(`arti_${article[1].toLowerCase()}`);
+    // In the Penal Code a § is not a document-level unit but the article's own subunit:
+    // art. 263 § 2 ships as arti_263 > para_2. In a regulation the § is the top unit, which
+    // is the branch below.
+    if (paragraph) steps.push(`para_${paragraph[1].toLowerCase()}`);
+  } else if (paragraph) {
+    steps.push(`para_${paragraph[1].toLowerCase()}`);
+  }
 
-  // There's no point looking in the content for a unit that isn't in the index.
-  if (ref && !match.index.some((entry) => entry.ref === ref)) ref = null;
+  if (steps.length > 0) {
+    for (const step of SUBUNITS) {
+      const found = step.pattern.exec(text);
+      // A basis naming a range or a list ("pkt 2-6", "pkt 2 i 3") gives the first unit —
+      // that is where reading the cited passage starts.
+      if (found) steps.push(`${step.prefix}_${found[1].toLowerCase()}`);
+    }
+  }
+
+  // There's no point looking in the content for a unit that isn't in the act. Only the
+  // first step is checked: the index holds articles and chapters, never the units below
+  // them, so asking it about a pass_/pint_ step would wipe out every path finer than an
+  // article — silently, since a missing target just leaves the reader at the top.
+  const ref = steps.length > 0 && match.index.some((entry) => entry.ref === steps[0])
+    ? steps.join('/')
+    : null;
 
   return { slug: match.slug, ref, readable: isReadable(match) };
 }
