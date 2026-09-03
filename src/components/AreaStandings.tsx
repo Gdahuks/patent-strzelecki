@@ -74,6 +74,35 @@ export function AreaStandings({
 
   if (slugs.length < 2 || attempts < MIN_ATTEMPTS) return null;
 
+  const rows = slugs.map((slug) => {
+    const tally = areas.get(slug) ?? { seen: 0, correct: 0, missed: [] };
+    const share = tally.seen > 0 ? tally.correct / tally.seen : 0;
+    const enough = tally.seen >= MIN_ANSWERS;
+    const critical = criticals.includes(slug);
+    return {
+      slug,
+      tally,
+      share,
+      enough,
+      weak: enough && share < (critical ? THRESHOLDS.critical : THRESHOLDS.rest),
+    };
+  });
+
+  /**
+   * Whether the mark's gutter is there at all.
+   *
+   * The mark sits at the **start** of the row, not among the numbers. It has to line up down
+   * the table — a column of marks is what makes a weak area findable without reading — and it
+   * has to stay next to what it qualifies. On the right it could only have one of the two:
+   * inside the right-aligned percentage the marks scattered by the width of the digits, and in
+   * a column of their own they ended up some 30 points from their own number, with the numbers
+   * strung out across the row. At the start it gets both, and the numbers close back up.
+   *
+   * The gutter appears for the whole table or not at all: with nothing to flag it would be
+   * dead space, and per-row it would make the names ragged.
+   */
+  const marked = rows.some((row) => row.weak);
+
   return (
     <Card>
       <View style={styles.header}>
@@ -81,59 +110,52 @@ export function AreaStandings({
         <Muted>z {attempts} podejść</Muted>
       </View>
 
-      {slugs.map((slug, index) => {
-        const tally = areas.get(slug) ?? { seen: 0, correct: 0, missed: [] };
-        const share = tally.seen > 0 ? tally.correct / tally.seen : 0;
-        const enough = tally.seen >= MIN_ANSWERS;
-        const critical = criticals.includes(slug);
-        const weak = enough && share < (critical ? THRESHOLDS.critical : THRESHOLDS.rest);
-
-        return (
-          <Pressable
-            key={slug}
-            onPress={() => onOpen(slug)}
-            accessibilityRole="button"
-            accessibilityLabel={
-              `${content.titleForSets([slug])}. `
-              + (enough
-                ? `${Math.round(share * 100)} procent, ${tally.correct} z ${tally.seen}${weak ? ', do poprawy' : ''}`
-                : `${tally.correct} z ${tally.seen} pytań`)
-            }
-            style={({ pressed }) => [
-              styles.row,
-              // The paper's opening four end here. A line rather than a sentence: the card
-              // above already says what that group is.
-              index === criticals.length && { borderTopColor: theme.border, borderTopWidth: 1 },
-              pressed && styles.pressed,
-            ]}
-          >
-            <Text style={[styles.name, { color: theme.text }]} numberOfLines={1}>
-              {content.titleForSets([slug])}
-            </Text>
-            {/* Three columns of fixed width, not one string per row. The mark carries a shape
-                as well as a colour — a red and a grey number are one number under
-                deuteranopia, the same rule the quiz's verdicts follow — and it needs a column
-                of its own: inside the percentage it rode along with the digits, so "⚠ 0%" and
-                "⚠ 14%" put their marks in two different places. The percentage keeps its
-                column even when there are too few answers to show one, so the count below
-                doesn't slide left. */}
-            <Text style={[styles.mark, { color: theme.bad, width: 14 * fontScale }]}>
+      {rows.map(({ slug, tally, share, enough, weak }, index) => (
+        <Pressable
+          key={slug}
+          onPress={() => onOpen(slug)}
+          accessibilityRole="button"
+          accessibilityLabel={
+            `${content.titleForSets([slug])}. `
+            + (enough
+              ? `${Math.round(share * 100)} procent, ${tally.correct} z ${tally.seen}${weak ? ', do poprawy' : ''}`
+              : `${tally.correct} z ${tally.seen} pytań`)
+          }
+          style={({ pressed }) => [
+            styles.row,
+            // The paper's opening four end here. A line rather than a sentence: the card
+            // above already says what that group is.
+            index === criticals.length && { borderTopColor: theme.border, borderTopWidth: 1 },
+            pressed && styles.pressed,
+          ]}
+        >
+          {/* The mark carries a shape as well as a colour — a red and a grey number are one
+              number under deuteranopia, the same rule the quiz's verdicts follow. */}
+          {marked ? (
+            <Text style={[styles.mark, { color: theme.bad, width: 16 * fontScale }]}>
               {weak ? '⚠' : ''}
             </Text>
-            <Text
-              style={[
-                styles.share,
-                { color: weak ? theme.bad : theme.muted, width: 44 * fontScale },
-              ]}
-            >
-              {enough ? `${Math.round(share * 100)}%` : ''}
-            </Text>
-            <Text style={[styles.count, { color: theme.muted, width: 52 * fontScale }]}>
-              {tally.correct}/{tally.seen}
-            </Text>
-          </Pressable>
-        );
-      })}
+          ) : null}
+          <Text style={[styles.name, { color: theme.text }]} numberOfLines={1}>
+            {content.titleForSets([slug])}
+          </Text>
+          {/* Both number columns are sized in points, so they grow with the system font: at a
+              larger scale a constant would clip "100%", since text scales itself and a width
+              does not. The percentage keeps its column even with too few answers to show one,
+              so the count doesn't slide into its place. */}
+          <Text
+            style={[
+              styles.share,
+              { color: weak ? theme.bad : theme.muted, width: 42 * fontScale },
+            ]}
+          >
+            {enough ? `${Math.round(share * 100)}%` : ''}
+          </Text>
+          <Text style={[styles.count, { color: theme.muted, width: 46 * fontScale }]}>
+            {tally.correct}/{tally.seen}
+          </Text>
+        </Pressable>
+      ))}
     </Card>
   );
 }
@@ -141,7 +163,7 @@ export function AreaStandings({
 const styles = StyleSheet.create({
   header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'baseline' },
   title: { fontSize: 16, fontWeight: '600' },
-  row: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 9 },
+  row: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 9 },
   pressed: { opacity: 0.65 },
   name: { flex: 1, fontSize: 14 },
   mark: { fontSize: 14 },
