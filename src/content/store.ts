@@ -7,7 +7,7 @@
  * relative image paths to resolve against.
  */
 
-import { ALL_SET_SLUG, CATEGORIES, category } from './categories';
+import { ALL_SET_SLUG, category } from './categories';
 import type { ContentBundle, Lesson, Question, QuestionSet } from './types';
 
 /**
@@ -120,15 +120,4 @@ export const content = {
     return titles.length === 1 ? titles[0] : titles.join(' + ');
   },
 
-  /**
-   * The five exam subject areas, with their questions counted.
-   *
-   * Same shape as `sets`, so the practice screen can swap one list for the other without
-   * knowing which of the two it is showing.
-   */
-  categories: CATEGORIES.map((entry) => ({
-    slug: entry.slug,
-    title: entry.title,
-    questionIds: [...new Set(idsForSlug(entry.slug))],
-  })) satisfies QuestionSet[] as readonly QuestionSet[],
 };
