@@ -733,10 +733,11 @@ export default function ExerciseScreen() {
         // moved the quiz on behind the question list.
         onPress={() => {
           cancelPendingAdvance();
-          // The narrowing travels with the link. Without it the browser resolved the same
-          // route to the whole area — six questions in this footer, 252 on the next screen.
+          // From a drill of exam mistakes the review shows the **whole** area, grouped by the
+          // exams' own verdicts: the six mistakes are a list you have just been through, and
+          // what makes the review worth opening is the rest of the area under them.
           router.push(
-            `/questions/${mode}/${params.sets}${examProfileId ? `?bledy=${examProfileId}` : ''}`,
+            `/questions/${mode}/${params.sets}${examProfileId ? `?egzamin=${examProfileId}` : ''}`,
           );
         }}
         accessibilityRole="button"

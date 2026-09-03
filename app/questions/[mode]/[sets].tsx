@@ -17,17 +17,22 @@ import { content } from '../../../src/content/store';
 import type { Question } from '../../../src/content/types';
 import {
   type PracticeMode,
+  examVerdicts,
   loadCards,
   questionsForPlan,
   resetProgress,
   saveCard,
 } from '../../../src/db/database';
 import type { Card } from '../../../src/engine/leitner';
+import { examProfile } from '../../../src/engine/exam';
 import { plural } from '../../../src/engine/plural';
 import {
   type CardState,
+  type ExamState,
   cardLabel,
   cardState,
+  examStateLabel,
+  groupByExamState,
   groupByState,
   markMastered,
   markNeedsWork,
@@ -45,14 +50,25 @@ import { useTheme } from '../../../src/theme';
  * match what's actually known.
  */
 export default function QuestionListScreen() {
-  const params = useLocalSearchParams<{ mode: string; sets: string; bledy?: string }>();
+  const params = useLocalSearchParams<{ mode: string; sets: string; egzamin?: string }>();
   const mode: PracticeMode = params.mode === 'flashcards' ? 'flashcards' : 'test';
   const setSlugs = useMemo(() => params.sets.split(',').filter(Boolean), [params.sets]);
-  // The same plan the practice screen resolves, from the same rule — this screen is reached
-  // from its footer, so a drill of six exam mistakes has to list those six and not the 252
-  // questions of the area they came from.
-  const plan = useMemo(() => planPracticeSet(setSlugs, params.bledy), [setSlugs, params.bledy]);
+  const plan = useMemo(() => planPracticeSet(setSlugs), [setSlugs]);
   const isWeak = plan.kind === 'weak';
+  /**
+   * Which of the two groupings this list shows, decided by where the reader came from.
+   *
+   * `?egzamin=<profil>` arrives from the exam side — the area screen and the drill of an
+   * area's exam mistakes. There "przejrzyj pytania" is a question about exams, so the list
+   * groups by the latest exam verdict; the practice buckets answer something else and would
+   * be a third measure on a path that already carries two. Everywhere else the buckets are
+   * exactly what the reader is looking at.
+   *
+   * The whole set either way. The drill narrows itself to six mistakes, but a review of them
+   * alone is a list you have already seen; what makes it useful is the rest of the area under
+   * it, in the order that says where you stand.
+   */
+  const examProfileId = params.egzamin;
 
   const theme = useTheme();
   const router = useRouter();
@@ -61,6 +77,7 @@ export default function QuestionListScreen() {
 
   const [questions, setQuestions] = useState<Question[] | null>(null);
   const [cards, setCards] = useState<Map<string, Card>>(new Map());
+  const [verdicts, setVerdicts] = useState<Map<string, boolean>>(new Map());
   const [openId, setOpenId] = useState<string | null>(null);
 
   useEffect(() => {
@@ -74,26 +91,40 @@ export default function QuestionListScreen() {
         pool.map((question) => question.id),
         mode,
       );
+      const asked = examProfileId
+        ? await examVerdicts(examProfile(examProfileId).id)
+        : new Map<string, boolean>();
       if (cancelled) return;
 
       setQuestions(pool);
       setCards(known);
+      setVerdicts(asked);
     })();
 
     return () => {
       cancelled = true;
     };
-  }, [plan, mode]);
+  }, [plan, mode, examProfileId]);
 
-  const sections = useMemo(() => {
+  type Section = { state: CardState | ExamState; title: string; data: string[] };
+  const sections: Section[] = useMemo(() => {
     if (!questions) return [];
     const ids = questions.map((question) => question.id);
+
+    if (examProfileId) {
+      return groupByExamState(ids, verdicts).map((group) => ({
+        state: group.state,
+        title: examStateLabel(group.state),
+        data: group.questionIds,
+      }));
+    }
+
     return groupByState(ids, cards, levels).map((group) => ({
       state: group.state,
       title: stateLabel(group.state),
       data: group.questionIds,
     }));
-  }, [questions, cards, levels]);
+  }, [questions, cards, levels, examProfileId, verdicts]);
 
   /**
    * The write goes to the database, and the card map is swapped so the row switches section
@@ -114,14 +145,16 @@ export default function QuestionListScreen() {
     [mode],
   );
 
-  const colorFor = (state: CardState): string =>
-    state === 'needsWork'
-      ? theme.bad
-      : state === 'learning'
-        ? theme.accent
-        : state === 'mastered'
-          ? theme.good
-          : theme.muted;
+  const colorFor = (state: CardState | ExamState): string => {
+    if (state === 'needsWork' || state === 'wrong') return theme.bad;
+    if (state === 'learning') return theme.accent;
+    if (state === 'mastered' || state === 'right') return theme.good;
+    return theme.muted;
+  };
+
+  /** The section's own name — a row is read out of the reader's sight of its header. */
+  const labelFor = (state: CardState | ExamState): string =>
+    examProfileId ? examStateLabel(state as ExamState) : stateLabel(state as CardState);
 
   const title = practiceSetTitle(plan);
 
@@ -144,9 +177,19 @@ export default function QuestionListScreen() {
         <View style={styles.header}>
           <Text style={[styles.heading, { color: theme.text }]}>{title}</Text>
           <Muted>
-            {questions.length} {plural(questions.length, 'pytanie', 'pytania', 'pytań')} w trybie{' '}
-            {mode === 'flashcards' ? 'fiszek' : 'testu ABC'}.
-            Dotknij pytania, żeby zobaczyć odpowiedź i poprawić jego stan.
+            {examProfileId ? (
+              <>
+                {questions.length} {plural(questions.length, 'pytanie', 'pytania', 'pytań')}{' '}
+                z podziałem po ostatniej odpowiedzi na egzaminie.
+                Dotknij pytania, żeby zobaczyć odpowiedź.
+              </>
+            ) : (
+              <>
+                {questions.length} {plural(questions.length, 'pytanie', 'pytania', 'pytań')}{' '}
+                w trybie {mode === 'flashcards' ? 'fiszek' : 'testu ABC'}.
+                Dotknij pytania, żeby zobaczyć odpowiedź i poprawić jego stan.
+              </>
+            )}
           </Muted>
         </View>
       }
@@ -190,7 +233,8 @@ export default function QuestionListScreen() {
             // silenced the correct answer and the progress caption — the very reason the row
             // expands in the first place.
             accessibilityLabel={
-              `${stateLabel(section.state)}. ${question.question}. ${cardLabel(card, levels)}`
+              `${labelFor(section.state)}. ${question.question}`
+              + (examProfileId ? '' : `. ${cardLabel(card, levels)}`)
               + (open ? `. Poprawna odpowiedź: ${question.answers[question.correct] ?? ''}` : '')
             }
             accessibilityState={{ expanded: open }}
@@ -205,13 +249,15 @@ export default function QuestionListScreen() {
                 ? [
                     ...(lawAction ? [lawAction] : []),
                     ...(lesson ? [{ name: 'lesson', label: `Otwórz lekcję: ${lesson.title}` }] : []),
-                    ...(cardState(card, levels) === 'needsWork'
+                    ...(examProfileId || cardState(card, levels) === 'needsWork'
                       ? []
                       : [{ name: 'needsWork', label: 'Oznacz jako do poprawy' }]),
-                    ...(cardState(card, levels) === 'mastered'
+                    ...(examProfileId || cardState(card, levels) === 'mastered'
                       ? []
                       : [{ name: 'mastered', label: 'Oznacz jako opanowane' }]),
-                    ...(card ? [{ name: 'reset', label: 'Wyzeruj postęp pytania' }] : []),
+                    ...(card && !examProfileId
+                      ? [{ name: 'reset', label: 'Wyzeruj postęp pytania' }]
+                      : []),
                   ]
                 : undefined
             }
@@ -239,7 +285,12 @@ export default function QuestionListScreen() {
               </Text>
             </View>
 
-            <Text style={[styles.meta, { color: theme.muted }]}>{cardLabel(card, levels)}</Text>
+            {/* The practice caption belongs to the practice grouping. In the exam grouping the
+                section header already says where the question stands, and the buckets would be
+                a third measure nobody asked this screen about. */}
+            {examProfileId ? null : (
+              <Text style={[styles.meta, { color: theme.muted }]}>{cardLabel(card, levels)}</Text>
+            )}
 
             {open ? (
               <View style={styles.details}>
@@ -268,7 +319,10 @@ export default function QuestionListScreen() {
 
                 {/* A manual state fix — for questions you know despite the recorded progress,
                     or the other way around. Visible buttons, because a hidden gesture would
-                    be undiscoverable. */}
+                    be undiscoverable. Only in the practice grouping: these buttons move a
+                    question between *those* sections, and offering them under „Błędne" would
+                    promise to change a verdict only another exam can change. */}
+                {examProfileId ? null : (
                 <View style={styles.actions}>
                   {cardState(card, levels) === 'needsWork' ? null : (
                     <Pressable
@@ -320,6 +374,7 @@ export default function QuestionListScreen() {
                     </Pressable>
                   ) : null}
                 </View>
+                )}
               </View>
             ) : null}
           </Pressable>

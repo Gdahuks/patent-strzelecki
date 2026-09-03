@@ -9,6 +9,7 @@ import {
   buildPool,
   examProfile,
   latestMisses,
+  latestVerdicts,
   unansweredNumbers,
   criticalCount,
   areaProgress,
@@ -377,6 +378,39 @@ describe('lifecycle of the exam-from-mistakes pool', () => {
     assert.ok(bands[2][0].some((entry) => entry.id === 'd2'));
     assert.ok(bands[3][0].some((entry) => entry.id === 'k0'));
     assert.doesNotThrow(() => drawExam(bands, PATENT_PROFILE, seeded(9)));
+  });
+});
+
+describe('latestVerdicts', () => {
+  const answer = (questionId: string, wasCorrect: boolean) => ({ questionId, wasCorrect });
+
+  it('keeps the newest answer to each question', () => {
+    // Attempts come newest first, so the first verdict seen is the one that counts — the same
+    // rule the mistake pool runs on, since both are the same question asked twice.
+    const verdicts = latestVerdicts([
+      [answer('a', true), answer('b', false)],
+      [answer('a', false), answer('c', true)],
+    ]);
+
+    assert.deepEqual([...verdicts], [
+      ['a', true],
+      ['b', false],
+      ['c', true],
+    ]);
+  });
+
+  it('says nothing about a question never asked', () => {
+    assert.equal(latestVerdicts([[answer('a', true)]]).has('b'), false);
+  });
+
+  it('agrees with the mistake pool it is shared with', () => {
+    const attempts = [[answer('a', false), answer('b', true)], [answer('c', false)]];
+    const verdicts = latestVerdicts(attempts);
+
+    assert.deepEqual(
+      latestMisses(attempts),
+      [...verdicts].filter(([, right]) => !right).map(([id]) => id),
+    );
   });
 });
 

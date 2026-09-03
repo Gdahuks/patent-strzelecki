@@ -135,6 +135,58 @@ export const CATEGORIES: readonly Category[] = [
  */
 export const ALL_SET_SLUG = 'wszystkie';
 
+/**
+ * The one area each question belongs to — the rule behind `content.areaOf`.
+ *
+ * Takes its data as arguments rather than reading the bundle, and that is the whole point: the
+ * partition is the model the paper and every number about it rest on, and the only test that
+ * could see it was the one on the real content bundle — which **skips itself** where the bundle
+ * is absent, i.e. in a fresh clone. Here the rule is checkable on four made-up questions.
+ *
+ * A question claimed by a thematic area and by the general one goes to the thematic area (see
+ * `general`); a question in no thematic set at all goes to the area that takes them
+ * (`includeUnassigned`). Two thematic areas claiming the same question is not resolved here on
+ * purpose — nothing sensible could decide it, and `categories.package.test.ts` fails on it
+ * against the real bundle.
+ *
+ * @param setMembers question ids of each course set, by set slug
+ * @param questionIds every question in the bundle, in its own order
+ */
+export function partitionQuestions(
+  setMembers: ReadonlyMap<string, readonly string[]>,
+  questionIds: readonly string[],
+  categories: readonly Category[] = CATEGORIES,
+): Map<string, string> {
+  const thematic = new Set<string>();
+  for (const [slug, ids] of setMembers) {
+    if (slug === ALL_SET_SLUG) continue;
+    for (const id of ids) thematic.add(id);
+  }
+  const unassigned = questionIds.filter((id) => !thematic.has(id));
+  const known = new Set(questionIds);
+
+  const claimedBy = (entry: Category): string[] => {
+    // A set naming a question the bundle doesn't carry would otherwise get an area, be counted
+    // in `seen` and land in `missed` — then vanish when the drill turns ids back into
+    // questions, leaving "Powtórz 3" over two cards.
+    const ids = entry.setSlugs
+      .flatMap((slug) => setMembers.get(slug) ?? [])
+      .filter((id) => known.has(id));
+    return entry.includeUnassigned ? [...ids, ...unassigned] : ids;
+  };
+
+  const areas = new Map<string, string>();
+  for (const entry of categories) {
+    if (entry.general) continue;
+    for (const id of claimedBy(entry)) areas.set(id, entry.slug);
+  }
+  for (const entry of categories) {
+    if (!entry.general) continue;
+    for (const id of claimedBy(entry)) if (!areas.has(id)) areas.set(id, entry.slug);
+  }
+  return areas;
+}
+
 /** Category for a slug, or undefined when the slug names a course set instead. */
 export function category(slug: string): Category | undefined {
   return CATEGORIES.find((entry) => entry.slug === slug);

@@ -47,6 +47,57 @@ export function cardState(card: Card | undefined, levels: number): CardState {
   return 'learning';
 }
 
+/**
+ * How a question stands in an exam, as the question browser groups it.
+ *
+ * A second grouping of the same list, chosen by where the reader came from: from the exam
+ * side, "przejrzyj pytania" is a question about exams, and the practice buckets answer
+ * something else. `unasked` is a state of its own and not a failure — most of an area of 252
+ * questions has never come up on a ten-question paper.
+ */
+export type ExamState = 'wrong' | 'right' | 'unasked';
+
+/** Section order: what cost you points, what didn't, then everything still ahead. */
+export const EXAM_STATE_ORDER: ExamState[] = ['wrong', 'right', 'unasked'];
+
+const EXAM_LABELS: Record<ExamState, string> = {
+  wrong: 'Błędne',
+  right: 'Poprawne',
+  unasked: 'Pozostałe',
+};
+
+export function examStateLabel(state: ExamState): string {
+  return EXAM_LABELS[state];
+}
+
+export interface ExamStateGroup {
+  state: ExamState;
+  questionIds: string[];
+}
+
+/**
+ * Questions grouped by their latest exam verdict; empty groups are dropped.
+ *
+ * @param verdicts latest verdict per question — see `latestVerdicts`
+ */
+export function groupByExamState(
+  questionIds: string[],
+  verdicts: Map<string, boolean>,
+): ExamStateGroup[] {
+  const groups = new Map<ExamState, string[]>(EXAM_STATE_ORDER.map((state) => [state, []]));
+
+  for (const id of questionIds) {
+    const verdict = verdicts.get(id);
+    const state: ExamState = verdict === undefined ? 'unasked' : verdict ? 'right' : 'wrong';
+    groups.get(state)?.push(id);
+  }
+
+  return EXAM_STATE_ORDER.map((state) => ({
+    state,
+    questionIds: groups.get(state) ?? [],
+  })).filter((group) => group.questionIds.length > 0);
+}
+
 export interface StateGroup {
   state: CardState;
   questionIds: string[];

@@ -22,6 +22,7 @@ import {
   areaProgress,
   examProfile,
   latestMisses,
+  latestVerdicts,
 } from '../engine/exam';
 import type { Card } from '../engine/leitner';
 
@@ -412,6 +413,23 @@ export async function missedQuestionIds(profile: ExamProfileId): Promise<string[
   );
 
   return latestMisses(parseAnswers(rows));
+}
+
+/**
+ * How each question this profile has asked currently stands — see `latestVerdicts`.
+ *
+ * The whole profile, not one area: the question browser opens for one area at a time, but
+ * narrowing here would be a second rule about what belongs where, and the caller already holds
+ * the list of questions it is grouping.
+ */
+export async function examVerdicts(profile: ExamProfileId): Promise<Map<string, boolean>> {
+  const database = await db();
+  const rows = await database.getAllAsync<{ answers: string }>(
+    'SELECT answers FROM exam_attempts WHERE profile = ? ORDER BY finished_at DESC',
+    [profile],
+  );
+
+  return latestVerdicts(parseAnswers(rows));
 }
 
 /**

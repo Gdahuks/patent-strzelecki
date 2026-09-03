@@ -338,6 +338,16 @@ a counting bug, since both numbers sit on the same screen. Manually marking a qu
 "mastered" **must** push `seen` above zero, or the question counts simultaneously as mastered
 and untouched, and "needs work" comes out negative.
 
+**The review screen has two groupings, and the entry point picks one.** From practice it
+groups by the spaced-repetition buckets, which is what the reader is looking at there. From the
+exam side — the area screen, and the drill of an area's exam mistakes — the route carries
+`?egzamin=<profil>` and the same screen lists the **whole** area by the latest exam verdict:
+„Błędne", „Poprawne", „Pozostałe". A review of the six mistakes alone is a list you have just
+been through; what makes it worth opening is the rest of the area underneath, in the order that
+says where you stand. In that mode there is no bucket caption and no manual state-fix button —
+both speak about the grouping that isn't on screen, and a button offering to change a verdict
+only another exam can change would be a lie.
+
 **There are two ways into a set's review screen**: long-pressing a set on the practice list
 (a menu offering review and reset), or tapping the footer progress bar inside an open set. There
 is deliberately no separate button in the header — one existed and was removed as a second path

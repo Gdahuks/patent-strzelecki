@@ -5,6 +5,7 @@ import { type Card, createDeck, deckProgress } from './leitner';
 import {
   cardLabel,
   cardState,
+  groupByExamState,
   groupByState,
   markMastered,
   markNeedsWork,
@@ -78,6 +79,46 @@ describe('groupByState', () => {
     assert.equal(sizes.get('learning') ?? 0, progress.learning);
     assert.equal(sizes.get('untouched') ?? 0, progress.untouched);
     assert.equal(sizes.get('mastered') ?? 0, progress.mastered);
+  });
+});
+
+describe('groupByExamState', () => {
+  const verdicts = new Map([
+    ['a', false],
+    ['b', true],
+    ['c', false],
+  ]);
+
+  it('puts the mistakes first, then what was right, then what was never asked', () => {
+    // The order is the point: this list answers "where do I stand", and a paper of ten
+    // questions leaves most of an area of 252 unasked, so that group belongs at the bottom.
+    const groups = groupByExamState(['b', 'x', 'a', 'c', 'y'], verdicts);
+
+    assert.deepEqual(groups, [
+      { state: 'wrong', questionIds: ['a', 'c'] },
+      { state: 'right', questionIds: ['b'] },
+      { state: 'unasked', questionIds: ['x', 'y'] },
+    ]);
+  });
+
+  it('treats a question with no verdict as unasked, not as wrong', () => {
+    assert.deepEqual(groupByExamState(['x'], new Map()), [
+      { state: 'unasked', questionIds: ['x'] },
+    ]);
+  });
+
+  it('drops empty groups, so a fully answered area has two sections', () => {
+    const groups = groupByExamState(['a', 'b'], verdicts);
+
+    assert.deepEqual(groups.map((group) => group.state), ['wrong', 'right']);
+  });
+
+  it('keeps the questions in the order they were given', () => {
+    // The caller passes the area in bundle order, and a section that reshuffled it would make
+    // the same question move between visits for no reason.
+    const groups = groupByExamState(['c', 'a'], verdicts);
+
+    assert.deepEqual(groups[0].questionIds, ['c', 'a']);
   });
 });
 

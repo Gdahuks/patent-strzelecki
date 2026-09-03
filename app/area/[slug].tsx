@@ -123,7 +123,12 @@ export default function AreaScreen() {
             onPress={() => router.push(`/practice/flashcards/${slug}?bledy=${profile.id}`)}
           />
         ) : null}
-        <Action label="Przejrzyj pytania" onPress={() => router.push(`/questions/test/${slug}`)} />
+        {/* The whole area, grouped by what the exams said about each question — this screen is
+            reached from the diagnosis, so that is the question being asked here. */}
+        <Action
+          label="Przejrzyj pytania"
+          onPress={() => router.push(`/questions/test/${slug}?egzamin=${profile.id}`)}
+        />
       </View>
     </ScrollView>
   );

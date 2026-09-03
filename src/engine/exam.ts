@@ -237,6 +237,22 @@ export function unansweredNumbers(
 export function latestMisses(
   attempts: readonly { questionId: string; wasCorrect: boolean }[][],
 ): string[] {
+  return [...latestVerdicts(attempts)]
+    .filter(([, wasCorrect]) => !wasCorrect)
+    .map(([questionId]) => questionId);
+}
+
+/**
+ * How each question asked so far currently stands: `true` when its latest answer was right.
+ *
+ * A question absent from the map has never been asked in this exam, which is a third state and
+ * not a false — the question browser shows exactly these three groups.
+ *
+ * @param attempts answers from past attempts, most recent first
+ */
+export function latestVerdicts(
+  attempts: readonly { questionId: string; wasCorrect: boolean }[][],
+): Map<string, boolean> {
   const verdicts = new Map<string, boolean>();
 
   for (const attempt of attempts) {
@@ -247,7 +263,7 @@ export function latestMisses(
     }
   }
 
-  return [...verdicts].filter(([, wasCorrect]) => !wasCorrect).map(([questionId]) => questionId);
+  return verdicts;
 }
 
 /** How one subject area stands: distinct questions asked, and how many are currently right. */

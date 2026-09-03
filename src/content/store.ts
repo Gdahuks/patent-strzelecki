@@ -7,8 +7,7 @@
  * relative image paths to resolve against.
  */
 
-import { ALL_SET_SLUG, CATEGORIES, category } from './categories';
-import type { Category } from './categories';
+import { CATEGORIES, category, partitionQuestions } from './categories';
 import type { ContentBundle, Lesson, Question, QuestionSet } from './types';
 
 /**
@@ -25,62 +24,18 @@ const lessonsBySlug = new Map(bundle.lessons.map((lesson) => [lesson.slug, lesso
 const setsBySlug = new Map(bundle.sets.map((set) => [set.slug, set]));
 
 /**
- * Questions the course files under no subject at all — see `Category.includeUnassigned`.
- *
- * Computed once from the bundle: everything that belongs to no set except the umbrella one.
- */
-const unassignedIds: string[] = (() => {
-  const assigned = new Set<string>();
-  for (const set of bundle.sets) {
-    if (set.slug === ALL_SET_SLUG) continue;
-    for (const id of set.questionIds) assigned.add(id);
-  }
-  return bundle.questions
-    .filter((question) => !assigned.has(question.id))
-    .map((question) => question.id);
-})();
-
-/**
- * Ids an area claims from the course's sets, before the narrower area gets its say.
- *
- * Only ids that are actually questions in this bundle. A set naming a question the bundle
- * doesn't carry would otherwise get an area, be counted in `seen` and land in `missed` — and
- * then vanish when the drill turns ids back into questions, leaving "Powtórz 3" over two
- * cards.
- */
-function claimedBy(entry: Category): Set<string> {
-  const ids = new Set(
-    entry.setSlugs
-      .flatMap((setSlug) => setsBySlug.get(setSlug)?.questionIds ?? [])
-      .filter((id) => questionsById.has(id)),
-  );
-  if (entry.includeUnassigned) for (const id of unassignedIds) ids.add(id);
-  return ids;
-}
-
-/**
  * The one area each question belongs to — the single source of that fact in the app.
  *
- * Areas are a partition (see `categories.ts`), and this map is what makes them one: a narrower
- * area takes a question the general area also claims. Everything about areas is read from
- * here — the pools the paper is drawn from, the rows of the diagnosis, the questions behind an
- * area's flashcards — so the paper and the numbers about it cannot drift apart.
- *
- * The 200 WPA questions are in no area at all; the map simply has no entry for them.
+ * The rule lives in `partitionQuestions`, where it can be tested on a fixture; this is only
+ * the bundle poured into it. Everything about areas is read from here — the pools the paper is
+ * drawn from, the rows of the diagnosis, the questions behind an area's flashcards — so the
+ * paper and the numbers about it cannot drift apart. The 200 WPA questions are in no area at
+ * all; the map simply has no entry for them.
  */
-const areaByQuestion: Map<string, string> = (() => {
-  const areas = new Map<string, string>();
-  const general = CATEGORIES.filter((entry) => entry.general);
-
-  for (const entry of CATEGORIES) {
-    if (entry.general) continue;
-    for (const id of claimedBy(entry)) areas.set(id, entry.slug);
-  }
-  for (const entry of general) {
-    for (const id of claimedBy(entry)) if (!areas.has(id)) areas.set(id, entry.slug);
-  }
-  return areas;
-})();
+const areaByQuestion: Map<string, string> = partitionQuestions(
+  new Map(bundle.sets.map((set) => [set.slug, set.questionIds])),
+  bundle.questions.map((question) => question.id),
+);
 
 /**
  * Each area's questions, in bundle order.
