@@ -15,10 +15,15 @@
  * agree by construction: the paper draws each slot from one area's questions, and the diagnosis
  * counts each answer in one area's row.
  *
- * Where the course files a question in two areas, the narrower one owns it — see `general`.
- * The alternative, counting such a question in both rows, was tried and is wrong: with the
- * paper drawing it from one area only, the other area's row would report results for a group
- * the question never appeared in. Someone who answers every question of the opening four
+ * Three things decide, in this order. A question the course filed under a thematic set stays
+ * there. A question it filed **twice** is settled by the article its legal basis cites — see
+ * `ownsArticles` — and not by the set's name. A question it filed nowhere goes to the general
+ * area (`includeUnassigned`) unless its basis names a subject no § 19 area covers, see
+ * `FOREIGN_SOURCES`.
+ *
+ * The alternative, counting a double-filed question in both rows, was tried and is wrong: with
+ * the paper drawing it from one area only, the other area's row would report results for a
+ * group the question never appeared in. Someone who answers every question of the opening four
  * correctly, and misses the same questions in the fifth area, would read a failing critical
  * row.
  *
@@ -46,15 +51,10 @@ export interface Category {
   /**
    * Whether this area yields a question to any other area that also claims it.
    *
-   * Exactly one area carries this, and it is the Act — the course files 43 questions in both
-   * "UoBiA" and "Prawo karne": all of the Act's own sanctions, art. 51 (wykroczenia) and
-   * art. 18 ust. 5 (cofnięcie pozwolenia). The narrower area wins them, and here that
-   * direction is forced rather than chosen: the course's "Prawo karne" set holds 49 questions
-   * of which those 43 *are* the substance, so leaving them under the Act would leave the fifth
-   * area 17 questions to fill two slots on every paper — the same handful over and over.
-   *
-   * A flag rather than a list of 43 ids: the rule survives a content refresh, an exception
-   * list would need maintaining against someone else's material.
+   * Exactly one area carries this, and it is the Act, which covers the statute as a whole. A
+   * question the course also filed under a narrower subject belongs to that subject — unless
+   * the narrower area limits itself to certain articles and this one cites another; see
+   * `ownsArticles` for the 43 questions where that distinction matters.
    */
   general?: true;
   /**
@@ -74,6 +74,14 @@ export interface Category {
    */
   ownsArticles?: readonly string[];
   /**
+   * How this area's own act is named at the start of a legal basis.
+   *
+   * Read together with another area's `ownsArticles`: the article decides only when the basis
+   * cites *this* act, because those articles are its articles. Without it, „KK - Art. 263"
+   * would be compared against the Act's penal chapter by bare number.
+   */
+  actName?: string;
+  /**
    * Whether questions belonging to no thematic set land here.
    *
    * Exactly one area carries this. 55 questions in the bundle belong to no set other than
@@ -85,11 +93,11 @@ export interface Category {
    * direction: a question that would fit safety rules better is not lost, it just lands in a
    * different slot of the paper.
    *
-   * There is deliberately **no exception list**. Three of those questions are arguably outside
-   * § 19 ust. 1 — the stamp duty on a promesa, and a registration deadline falling on a
-   * Saturday — but excluding them would buy a tidier label at the price of a rule to maintain
-   * and a judgement call that is ours to make and shouldn't be. Three questions in a pool of
-   * 252 change nothing about the paper, and this way every question the course teaches stays
+   * The rule is about *filing*, not about subject, so three of these questions turned out to
+   * be outside § 19 ust. 1 altogether — the stamp duty on a promesa (twice) and a registration
+   * deadline from the KPA. They are excluded here by `FOREIGN_SOURCES`, because this area
+   * feeds the opening four, where a single mistake fails the paper: a fee is not something the
+   * licence exam may fail anyone on. Everything else the course left unfiled stays, and stays
    * reachable in an exam.
    */
   includeUnassigned?: true;
@@ -101,9 +109,8 @@ export const CATEGORIES: readonly Category[] = [
     title: 'UoBiA i przepisy wykonawcze',
     setSlugs: ['uobia', 'rozp-noszenie', 'rozp-transport'],
     includeUnassigned: true,
-    // The Act is the general area: it covers the statute as a whole, so a question the course
-    // also files under a narrower subject belongs there instead. See `general`.
     general: true,
+    actName: 'UoBiA',
   },
   {
     slug: 'zg-bezpieczenstwo',
@@ -172,7 +179,12 @@ export const FOREIGN_SOURCES: readonly string[] = [
 /** Whether a legal basis names a source that no § 19 area covers — see `FOREIGN_SOURCES`. */
 export function namesForeignSource(law: string): boolean {
   const text = law.trimStart();
-  return FOREIGN_SOURCES.some((source) => text.startsWith(source));
+  return FOREIGN_SOURCES.some((source) => {
+    if (!text.startsWith(source)) return false;
+    // „KPA" must not match „KPAnaliza": the next character has to end the name.
+    const next = text.charAt(source.length);
+    return next === '' || !/\p{L}/u.test(next);
+  });
 }
 
 /**
@@ -197,14 +209,15 @@ export const ALL_SET_SLUG = 'wszystkie';
  * could see it was the one on the real content bundle — which **skips itself** where the bundle
  * is absent, i.e. in a fresh clone. Here the rule is checkable on four made-up questions.
  *
- * A question claimed by a thematic area and by the general one goes to the thematic area (see
- * `general`); a question in no thematic set at all goes to the area that takes them
- * (`includeUnassigned`). Two thematic areas claiming the same question is not resolved here on
- * purpose — nothing sensible could decide it, and `categories.package.test.ts` fails on it
- * against the real bundle.
+ * A question claimed by a thematic area and by the general one stays with the thematic area,
+ * unless that area owns only certain articles of the general one's act and this question cites
+ * another (`ownsArticles`). A question in no thematic set goes to the area that takes them
+ * (`includeUnassigned`), minus the subjects in `FOREIGN_SOURCES`. Two thematic areas claiming
+ * the same question is not resolved here on purpose — nothing sensible could decide it, and
+ * `categories.package.test.ts` fails on it against the real bundle.
  *
  * @param setMembers question ids of each course set, by set slug
- * @param questionIds every question in the bundle, in its own order
+ * @param questions every question in the bundle, in its own order, with its legal basis
  */
 export function partitionQuestions(
   setMembers: ReadonlyMap<string, readonly string[]>,
@@ -251,7 +264,13 @@ export function partitionQuestions(
       // articles it owns, a question citing anything else belongs to the general one.
       const owner = categories.find((candidate) => candidate.slug === taken);
       if (!owner?.ownsArticles) continue;
-      const article = lawArticle(law.get(id) ?? '');
+      // Only an article **of this act** can decide, since `ownsArticles` are its articles and
+      // nothing else. A basis pointing at another act keeps the course's own filing: art. 263
+      // of the penal code is penal law, and reading its number as if it were the Act's would
+      // hand it to the group where a single mistake fails the paper.
+      const basis = law.get(id) ?? '';
+      if (entry.actName === undefined || !basis.trimStart().startsWith(entry.actName)) continue;
+      const article = lawArticle(basis);
       if (article === undefined || owner.ownsArticles.includes(article)) continue;
       areas.set(id, entry.slug);
     }

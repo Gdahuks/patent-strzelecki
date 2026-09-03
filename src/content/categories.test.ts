@@ -12,7 +12,14 @@ import { type Category, partitionQuestions } from './categories';
  * subject at all goes.
  */
 const AREAS: Category[] = [
-  { slug: 'zg-ogolne', title: 'Ogólne', setSlugs: ['ustawa'], includeUnassigned: true, general: true },
+  {
+    slug: 'zg-ogolne',
+    title: 'Ogólne',
+    setSlugs: ['ustawa'],
+    includeUnassigned: true,
+    general: true,
+    actName: 'Ustawa',
+  },
   { slug: 'zg-wask', title: 'Węższe', setSlugs: ['karne'], ownsArticles: ['51'] },
 ];
 
@@ -84,6 +91,19 @@ describe('partitionQuestions', () => {
     );
 
     assert.equal(areas.get('x'), 'zg-wask');
+  });
+
+  it('lets another act keep the question, whatever its article number is', () => {
+    // `ownsArticles` are the Act's articles, so only a basis citing the Act can be measured
+    // against them. Art. 263 of the penal code is penal law; reading its number as if it were
+    // the Act's would hand it to the group where a single mistake fails the paper.
+    const areas = partitionQuestions(
+      sets({ ustawa: ['kk'], karne: ['kk'] }),
+      questions(['kk', 'KK - Art. 263, § 2']),
+      AREAS,
+    );
+
+    assert.equal(areas.get('kk'), 'zg-wask');
   });
 
   it('leaves out an unfiled question whose basis names a source no area covers', () => {

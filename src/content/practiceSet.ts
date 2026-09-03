@@ -7,7 +7,7 @@ import { WEAK_SET_SLUG, WEAK_SET_TITLE, content } from './store';
  * Three screens ask that question — the flashcards/quiz screen, the question browser, and the
  * area screen, which builds the links — and the answer is not always "the sets in the URL".
  * Two of them used to work it out for themselves, and the third copy of the rule is where a
- * bug came from: the browser resolved a drill of six exam mistakes to all 252 questions of the
+ * bug came from: the browser resolved a drill of six exam mistakes to all 268 questions of the
  * area, under the area's own title, because it knew nothing about `?bledy`. So the decision
  * lives here, once.
  *

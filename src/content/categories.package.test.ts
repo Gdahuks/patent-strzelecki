@@ -112,6 +112,14 @@ describe.skipIf(!PRESENT)('subject areas on the real bundle', () => {
     );
 
     assert.equal(contested.length, 43);
+    // Comparing bare article numbers only means something while every contested basis names
+    // the Act — the rule checks the act too, and this is what keeps the assertion honest.
+    for (const question of contested) {
+      assert.ok(
+        (question.law ?? '').trimStart().startsWith('UoBiA'),
+        `sporne pytanie cytuje inny akt: „${question.law}" (${question.id})`,
+      );
+    }
     assert.equal(penal.length, 24, 'art. 50 i 51 — rozdział „Przepisy karne"');
     for (const question of penal) {
       assert.equal(store.areaOf(question.id), 'zg-prawo-karne', question.id);
@@ -132,13 +140,13 @@ describe.skipIf(!PRESENT)('subject areas on the real bundle', () => {
     // three attempts at a general normaliser were worse than reading the first word. The
     // author's note is on the list on purpose — it is known, and the question under it is
     // about storing ammunition in an S1 cabinet, which belongs here.
+    // Only prefixes that are actually there. `KK`, `§` and a lowercase `rozporządzenie` were
+    // on this list and appear nowhere in the critical pool — a dead entry is worse than a
+    // missing one, because it pre-approves a source nobody has looked at.
     const accepted = [
       'UoBiA',
       'Rozporządzenie',
-      'rozporządzenie',
-      '§',
       'Ogólne zasady bezpieczeństwa',
-      'KK',
       'Pytanie jest POPRAWNE',
     ];
     const critical = PATENT_PROFILE.layers
