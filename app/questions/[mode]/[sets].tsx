@@ -12,14 +12,15 @@ import {
 import { LawLink, lawAccessibilityAction, openLaw } from '../../../src/components/LawLink';
 import { useBottomInset } from '../../../src/components/safeArea';
 import { Muted } from '../../../src/components/ui';
-import { WEAK_SET_SLUG, content } from '../../../src/content/store';
+import { planPracticeSet, practiceSetTitle } from '../../../src/content/practiceSet';
+import { content } from '../../../src/content/store';
 import type { Question } from '../../../src/content/types';
 import {
   type PracticeMode,
   loadCards,
+  questionsForPlan,
   resetProgress,
   saveCard,
-  weakQuestionIds,
 } from '../../../src/db/database';
 import type { Card } from '../../../src/engine/leitner';
 import { plural } from '../../../src/engine/plural';
@@ -44,10 +45,14 @@ import { useTheme } from '../../../src/theme';
  * match what's actually known.
  */
 export default function QuestionListScreen() {
-  const params = useLocalSearchParams<{ mode: string; sets: string }>();
+  const params = useLocalSearchParams<{ mode: string; sets: string; bledy?: string }>();
   const mode: PracticeMode = params.mode === 'flashcards' ? 'flashcards' : 'test';
   const setSlugs = useMemo(() => params.sets.split(',').filter(Boolean), [params.sets]);
-  const isWeak = setSlugs.length === 1 && setSlugs[0] === WEAK_SET_SLUG;
+  // The same plan the practice screen resolves, from the same rule — this screen is reached
+  // from its footer, so a drill of six exam mistakes has to list those six and not the 252
+  // questions of the area they came from.
+  const plan = useMemo(() => planPracticeSet(setSlugs, params.bledy), [setSlugs, params.bledy]);
+  const isWeak = plan.kind === 'weak';
 
   const theme = useTheme();
   const router = useRouter();
@@ -62,9 +67,7 @@ export default function QuestionListScreen() {
     let cancelled = false;
 
     void (async () => {
-      const pool = isWeak
-        ? content.questionsByIds(await weakQuestionIds(mode))
-        : content.questionsForSets(setSlugs);
+      const pool = await questionsForPlan(plan, mode);
       if (cancelled) return;
 
       const known = await loadCards(
@@ -80,7 +83,7 @@ export default function QuestionListScreen() {
     return () => {
       cancelled = true;
     };
-  }, [setSlugs, isWeak, mode]);
+  }, [plan, mode]);
 
   const sections = useMemo(() => {
     if (!questions) return [];
@@ -120,7 +123,7 @@ export default function QuestionListScreen() {
           ? theme.good
           : theme.muted;
 
-  const title = content.titleForSets(setSlugs);
+  const title = practiceSetTitle(plan);
 
   if (!questions) {
     return (

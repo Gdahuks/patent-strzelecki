@@ -17,16 +17,15 @@ import { LawLink } from '../../../src/components/LawLink';
 import { positionLabel } from '../../../src/content/answers';
 import { useBottomInset } from '../../../src/components/safeArea';
 import { SegmentedBar } from '../../../src/components/ui';
-import { category } from '../../../src/content/categories';
-import { WEAK_SET_SLUG, content } from '../../../src/content/store';
+import { planPracticeSet, practiceSetTitle } from '../../../src/content/practiceSet';
+import { content } from '../../../src/content/store';
 import type { Letter, Question } from '../../../src/content/types';
 import {
   type PracticeMode,
-  areaMistakes,
   loadCards,
   resetProgress,
   saveCard,
-  weakQuestionIds,
+  questionsForPlan,
 } from '../../../src/db/database';
 import {
   type DeckState,
@@ -37,7 +36,6 @@ import {
   nextCard,
   shuffle,
 } from '../../../src/engine/leitner';
-import { examProfile } from '../../../src/engine/exam';
 import { plural } from '../../../src/engine/plural';
 import { useSettings } from '../../../src/settings/SettingsContext';
 import { useTheme } from '../../../src/theme';
@@ -63,18 +61,18 @@ export default function ExerciseScreen() {
   // bottom below the other three sides on a device with no bottom inset.
   const donePadding = useBottomInset(28);
 
-  // The "moje błędy" (my mistakes) set doesn't exist in the content bundle — it's assembled
-  // from the progress database, so its questions have to be loaded asynchronously, same as
-  // the buckets themselves.
-  const isWeak = setSlugs.length === 1 && setSlugs[0] === WEAK_SET_SLUG;
   /**
-   * Narrows the set to the questions this exam profile has actually caught you on.
+   * What this route is a set of — a course set, the virtual "moje błędy", or one area narrowed
+   * to its exam mistakes (`?bledy=<profil>`).
    *
-   * A parameter on the ordinary route rather than a third virtual set: the set stays real and
-   * this only filters it, so the resolution path — and the two screens that share it — needs
-   * no new special case beyond „moje błędy".
+   * The rule lives in `planPracticeSet` because the question browser needs exactly the same
+   * answer, and the two screens working it out separately is what let the browser open all 252
+   * questions of an area from a drill of six. Two of the three kinds are assembled from the
+   * database, so the questions still load asynchronously.
    */
   const examProfileId = params.bledy;
+  const plan = useMemo(() => planPracticeSet(setSlugs, examProfileId), [setSlugs, examProfileId]);
+  const isWeak = plan.kind === 'weak';
   const [questions, setQuestions] = useState<Question[] | null>(null);
   const [deck, setDeck] = useState<DeckState | null>(null);
   const [currentId, setCurrentId] = useState<string | null>(null);
@@ -152,17 +150,7 @@ export default function ExerciseScreen() {
     let cancelled = false;
 
     void (async () => {
-      const whole = isWeak
-        ? content.questionsByIds(await weakQuestionIds(mode))
-        : content.questionsForSets(setSlugs);
-      // The parameter narrows an *area* to what its exams caught you on, so it is honoured
-      // only on an area route — the counter promising those questions lives on the area
-      // screen, and this has to be the same list. On a course set the parameter means
-      // nothing and the whole set is shown.
-      const area = setSlugs.length === 1 ? category(setSlugs[0]) : undefined;
-      const pool = examProfileId && area
-        ? content.questionsByIds(await areaMistakes(examProfile(examProfileId).id, area.slug))
-        : whole;
+      const pool = await questionsForPlan(plan, mode);
       if (cancelled) return;
 
       const ids = pool.map((question) => question.id);
@@ -181,7 +169,7 @@ export default function ExerciseScreen() {
     return () => {
       cancelled = true;
     };
-  }, [setSlugs, isWeak, examProfileId, mode, levels, advance]);
+  }, [plan, mode, levels, advance]);
 
   /**
    * The deck as seen by the refresh effect.
@@ -426,10 +414,7 @@ export default function ExerciseScreen() {
     );
   }, [questions, mode, levels, advance, cancelPendingAdvance]);
 
-  // The subset needs its own name, or the header would promise the whole area.
-  const title = examProfileId
-    ? `Pomyłki: ${content.titleForSets(setSlugs)}`
-    : content.titleForSets(setSlugs);
+  const title = practiceSetTitle(plan);
 
   const header = (
     <Stack.Screen
@@ -748,7 +733,11 @@ export default function ExerciseScreen() {
         // moved the quiz on behind the question list.
         onPress={() => {
           cancelPendingAdvance();
-          router.push(`/questions/${mode}/${params.sets}`);
+          // The narrowing travels with the link. Without it the browser resolved the same
+          // route to the whole area — six questions in this footer, 252 on the next screen.
+          router.push(
+            `/questions/${mode}/${params.sets}${examProfileId ? `?bledy=${examProfileId}` : ''}`,
+          );
         }}
         accessibilityRole="button"
         // Without a label, a screen reader would read the three lines of numbers and

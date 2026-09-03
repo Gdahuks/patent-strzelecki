@@ -13,8 +13,16 @@ import * as SQLite from 'expo-sqlite';
 // dependency: `src/content/` must never import `src/db/` (that would pull expo-sqlite into
 // tests that run without the app), while the reverse costs nothing — this module only ever
 // runs inside the app.
+import type { PracticeSetPlan } from '../content/practiceSet';
 import { content } from '../content/store';
-import { type AreaTally, type ExamProfileId, areaProgress, latestMisses } from '../engine/exam';
+import type { Question } from '../content/types';
+import {
+  type AreaTally,
+  type ExamProfileId,
+  areaProgress,
+  examProfile,
+  latestMisses,
+} from '../engine/exam';
 import type { Card } from '../engine/leitner';
 
 const DATABASE = 'patent.db';
@@ -375,6 +383,27 @@ export async function weakQuestionIds(mode: PracticeMode, maxBucket = 0): Promis
  * The cost is deliberate: the same question can need fixing separately in each exam. That's
  * how flashcards and the ABC quiz already work — separate tracks, separate counters.
  */
+/**
+ * Stored answers of several attempts, skipping any row that can't be read.
+ *
+ * `Array.isArray` and not only `try/catch`: `JSON.parse('null')` and `'{}'` both succeed and
+ * then throw where the array is iterated, one level up from any handler — and these reads run
+ * inside `void …then(…)` on a screen, so the failure would show as a table that silently
+ * stopped updating.
+ */
+function parseAnswers(rows: readonly { answers: string }[]): AttemptAnswer[][] {
+  const parsed: AttemptAnswer[][] = [];
+  for (const row of rows) {
+    try {
+      const answers = JSON.parse(row.answers) as unknown;
+      if (Array.isArray(answers)) parsed.push(answers as AttemptAnswer[]);
+    } catch {
+      // A corrupted entry is skipped — the rest of the history is still useful.
+    }
+  }
+  return parsed;
+}
+
 export async function missedQuestionIds(profile: ExamProfileId): Promise<string[]> {
   const database = await db();
   const rows = await database.getAllAsync<{ answers: string }>(
@@ -382,15 +411,7 @@ export async function missedQuestionIds(profile: ExamProfileId): Promise<string[
     [profile],
   );
 
-  const attempts: AttemptAnswer[][] = [];
-  for (const row of rows) {
-    try {
-      attempts.push(JSON.parse(row.answers) as AttemptAnswer[]);
-    } catch {
-      // A corrupted entry is skipped — the rest of the history is still useful.
-    }
-  }
-  return latestMisses(attempts);
+  return latestMisses(parseAnswers(rows));
 }
 
 /**
@@ -404,6 +425,24 @@ export async function missedQuestionIds(profile: ExamProfileId): Promise<string[
 export async function areaMistakes(profile: ExamProfileId, area: string): Promise<string[]> {
   const { areas } = await areaStandings(profile);
   return areas.get(area)?.missed ?? [];
+}
+
+/**
+ * The questions a practice plan names — the fetching half of `planPracticeSet`.
+ *
+ * Two of the three kinds of set live in this database rather than in the bundle, which is why
+ * the rule (`src/content/practiceSet.ts`) and the reading (here) are split: the rule has to be
+ * usable without the app, the reading needs a database.
+ */
+export async function questionsForPlan(
+  plan: PracticeSetPlan,
+  mode: PracticeMode,
+): Promise<Question[]> {
+  if (plan.kind === 'weak') return content.questionsByIds(await weakQuestionIds(mode));
+  if (plan.kind === 'mistakes') {
+    return content.questionsByIds(await areaMistakes(examProfile(plan.profile).id, plan.area));
+  }
+  return content.questionsForSets([...plan.slugs]);
 }
 
 export async function resetAllProgress(): Promise<void> {
@@ -457,14 +496,7 @@ export async function areaStandings(
     [profile],
   );
 
-  const parsed: AttemptAnswer[][] = [];
-  for (const row of rows) {
-    try {
-      parsed.push(JSON.parse(row.answers) as AttemptAnswer[]);
-    } catch {
-      // A corrupted entry is skipped — the rest of the history is still useful.
-    }
-  }
+  const parsed = parseAnswers(rows);
 
   return {
     attempts: parsed.length,
