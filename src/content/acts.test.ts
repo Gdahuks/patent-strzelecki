@@ -68,17 +68,18 @@ const ACTS: Act[] = [
 ];
 
 describe('resolveLaw', () => {
-  it('hits an article of the act', () => {
+  it('hits the unit of the act a basis names, down to the paragraph', () => {
     assert.deepEqual(resolveLaw('UoBiA - Art. 15 ust. 2', ACTS), {
       slug: 'uobia',
-      ref: 'arti_15',
+      ref: 'arti_15/pass_2',
       readable: true,
     });
   });
 
-  it("hits a code's article when a paragraph is also written", () => {
-    // "KK - Art. 263, § 2" — the article number takes precedence over the paragraph.
-    assert.equal(resolveLaw('KK - Art. 263, § 2', ACTS)?.ref, 'arti_263');
+  it("reads a code's § as the article's own subunit", () => {
+    // "KK - Art. 263, § 2" — the Penal Code divides an article into §, so the § is a step
+    // below the article, not a competing document-level unit.
+    assert.equal(resolveLaw('KK - Art. 263, § 2', ACTS)?.ref, 'arti_263/para_2');
   });
 
   it('hits a paragraph of a regulation', () => {
@@ -105,7 +106,7 @@ describe('resolveLaw', () => {
           'ewidencjonowania broni i amunicji',
         ACTS,
       ),
-      { slug: 'noszenie', ref: 'para_8', readable: true },
+      { slug: 'noszenie', ref: 'para_8/pass_1', readable: true },
     );
   });
 
@@ -146,7 +147,7 @@ describe('resolveLaw', () => {
     // deposit costs, and art. 23 ust. 1 of UoBiA says exactly that.
     assert.deepEqual(resolveLaw('art. 23 ust. 1', ACTS), {
       slug: 'uobia',
-      ref: 'arti_23',
+      ref: 'arti_23/pass_1',
       readable: true,
     });
   });
@@ -184,7 +185,7 @@ describe('resolveLaw', () => {
   });
 
   it('tolerates missing punctuation and mixed case', () => {
-    assert.equal(resolveLaw('uobia art 51 ust. 3', ACTS)?.ref, 'arti_51');
+    assert.equal(resolveLaw('uobia art 51 ust. 3', ACTS)?.ref, 'arti_51/pass_3');
   });
 });
 
@@ -430,5 +431,35 @@ describe('sourceName', () => {
     const ustawa = act({ slug: 'inna', short: 'Ustawa w sprawie czegoś', lawPrefix: 'X', html: '' });
 
     assert.equal(sourceName('X - § 2 ust. 1', ustawa), 'Ustawa w sprawie czegoś');
+  });
+});
+
+describe('resolveLaw: a unit below the article', () => {
+  it('goes down to the point a basis names', () => {
+    // 457 of 598 bases in the bundle name something smaller than an article. Landing on the
+    // article means reading art. 18's eight paragraphs to find the one the question was about.
+    assert.equal(resolveLaw('UoBiA - Art. 15, ust. 1, pkt 2', ACTS)?.ref, 'arti_15/pass_1/pint_2');
+  });
+  it('goes to the first unit of a range or a list', () => {
+    // „pkt 2-6" and „pkt 2 i 3" name several units; the first one is where reading starts.
+    assert.equal(resolveLaw('UoBiA - Art. 15 ust. 1 pkt 2-6', ACTS)?.ref, 'arti_15/pass_1/pint_2');
+    assert.equal(resolveLaw('UoBiA - Art. 15 ust. 1 pkt 2 i 3', ACTS)?.ref, 'arti_15/pass_1/pint_2');
+  });
+
+  it('takes a letter as the deepest step', () => {
+    assert.equal(
+      resolveLaw('UoBiA - Art. 15 ust. 1 pkt 2 lit. b', ACTS)?.ref,
+      'arti_15/pass_1/pint_2/lett_b',
+    );
+  });
+
+  it('still lands on the article when the basis names nothing smaller', () => {
+    assert.equal(resolveLaw('UoBiA - Art. 15', ACTS)?.ref, 'arti_15');
+  });
+
+  it('drops the whole path when the article itself is not in the act', () => {
+    // The guard checks the article against the act's index; the index holds articles and
+    // chapters only, so it must not be asked about pass_/pint_ steps.
+    assert.equal(resolveLaw('UoBiA - Art. 99, ust. 1', ACTS)?.ref, null);
   });
 });
