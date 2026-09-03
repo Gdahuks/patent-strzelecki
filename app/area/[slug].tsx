@@ -23,17 +23,19 @@ import { useTheme } from '../../src/theme';
  * "0/3" turning into "24 untouched" on the next screen read like a bug. Here both are named,
  * side by side, and going on to answer questions is a choice rather than a side effect.
  *
- * Every row is state *and* the way in, which is why there are no buttons underneath: a row
- * that shows a number and leads nowhere would be the odd one out. A row says where it leads
- * only when the label does not: the exam row goes to its own mistakes rather than to the
- * area, so it names that, and the practice rows carry the bare arrow.
+ * A practice row is state *and* the way in: it opens exactly the questions its numbers
+ * describe, so the arrow needs no explaining. The exam row is neither — an exam is composed
+ * from all five areas at once, so there is nothing here to open, and the row shows its state
+ * only. What the exam leaves behind, its mistakes, is a different action on a different set of
+ * questions, and it sits below the card with the other action rather than inside a row. That
+ * row used to carry it as "powtórz 6 →", which made one row of three two lines tall and the
+ * odd one out for doing something the others don't.
  */
 export default function AreaScreen() {
   const params = useLocalSearchParams<{ slug: string; profile?: string }>();
   const slug = params.slug;
   const profile = examProfile(params.profile);
 
-  const theme = useTheme();
   const router = useRouter();
   const { levels } = useSettings();
   const paddingBottom = useBottomInset(28);
@@ -91,22 +93,12 @@ export default function AreaScreen() {
       </Muted>
 
       <Card>
-        {/* The exam's own number, and the only place it can be acted on: its mistakes are the
-            questions this area has actually cost you. Flashcards rather than the quiz — a
-            question you got wrong is one whose answer you don't know yet, and that is what a
-            flashcard is for. */}
         <Row
           label="Na egzaminach"
           value={
             exam.seen > 0
               ? `pytano o ${exam.seen} · ${exam.correct} poprawnie`
               : 'jeszcze nie pytano'
-          }
-          hint={exam.mistakes > 0 ? `powtórz ${exam.mistakes}` : undefined}
-          onPress={
-            exam.mistakes > 0
-              ? () => router.push(`/practice/flashcards/${slug}?bledy=${profile.id}`)
-              : undefined
           }
         />
         <Row
@@ -121,30 +113,44 @@ export default function AreaScreen() {
         />
       </Card>
 
-      <Pressable
-        onPress={() => router.push(`/questions/test/${slug}`)}
-        accessibilityRole="button"
-        style={({ pressed }) => [styles.review, pressed && styles.pressed]}
-      >
-        <Text style={{ color: theme.accent, fontSize: 14 }}>Przejrzyj pytania →</Text>
-      </Pressable>
+      <View>
+        {/* Flashcards rather than the quiz: a question you got wrong is one whose answer you
+            don't know yet, and that is what a flashcard is for. Gone entirely at zero — there
+            is nothing to repeat, and a disabled line would only invite a tap. */}
+        {exam.mistakes > 0 ? (
+          <Action
+            label={`Powtórz ${exam.mistakes} ${plural(exam.mistakes, 'pomyłkę', 'pomyłki', 'pomyłek')}`}
+            onPress={() => router.push(`/practice/flashcards/${slug}?bledy=${profile.id}`)}
+          />
+        ) : null}
+        <Action label="Przejrzyj pytania" onPress={() => router.push(`/questions/test/${slug}`)} />
+      </View>
     </ScrollView>
+  );
+}
+
+/** One thing this screen can do, under the card of what it knows. */
+function Action({ label, onPress }: { label: string; onPress: () => void }) {
+  const theme = useTheme();
+
+  return (
+    <Pressable
+      onPress={onPress}
+      accessibilityRole="button"
+      style={({ pressed }) => [styles.action, pressed && styles.pressed]}
+    >
+      <Text style={{ color: theme.accent, fontSize: 14 }}>{label} →</Text>
+    </Pressable>
   );
 }
 
 function Row({
   label,
   value,
-  hint,
   onPress,
 }: {
   label: string;
   value: string;
-  /**
-   * What the tap does, when that isn't obvious from the label. Ignored on a row that
-   * leads nowhere.
-   */
-  hint?: string;
   onPress?: () => void;
 }) {
   const theme = useTheme();
@@ -156,21 +162,17 @@ function Row({
       onPress={onPress}
       disabled={!leads}
       accessibilityRole={leads ? 'button' : undefined}
-      accessibilityLabel={`${label}: ${value}${leads && hint ? `. ${hint}` : ''}`}
+      accessibilityLabel={`${label}: ${value}`}
       style={({ pressed }) => [styles.row, pressed && leads && styles.pressed]}
     >
       <Text style={[styles.label, { color: theme.text }]}>{label}</Text>
       <View style={styles.values}>
         <Text style={[styles.value, { color: theme.muted }]}>
           {value}
-          {/* The arrow marks the row as a way in, on every row that is one — the same
-              affordance the rest of the app uses. Without it the rows whose tap needs no
-              explaining looked like plain text next to the one that had a hint. */}
-          {leads && !hint ? <Text style={{ color: theme.accent }}>{'  →'}</Text> : null}
+          {/* The arrow marks the row as a way in — the same affordance the rest of the app
+              uses. The exam row has none, because it isn't one. */}
+          {leads ? <Text style={{ color: theme.accent }}>{'  →'}</Text> : null}
         </Text>
-        {leads && hint ? (
-          <Text style={[styles.hint, { color: theme.accent }]}>{hint} →</Text>
-        ) : null}
       </View>
     </Pressable>
   );
@@ -193,6 +195,5 @@ const styles = StyleSheet.create({
   label: { flex: 1, fontSize: 15, fontWeight: '600' },
   values: { alignItems: 'flex-end' },
   value: { fontSize: 13 },
-  hint: { fontSize: 13, fontWeight: '600', marginTop: 2 },
-  review: { alignSelf: 'flex-start', paddingVertical: 8 },
+  action: { alignSelf: 'flex-start', paddingVertical: 8 },
 });
