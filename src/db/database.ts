@@ -388,6 +388,21 @@ export async function missedQuestionIds(profile: ExamProfileId): Promise<string[
   return latestMisses(attempts);
 }
 
+/**
+ * Exam mistakes of one profile, narrowed to a given set of questions.
+ *
+ * Lives here rather than in `content/examPool` on purpose: anything importing `src/db/` pulls
+ * in expo-sqlite, and `examPool` is read by a test that runs without the app.
+ */
+export async function examMistakesAmong(
+  profile: ExamProfileId,
+  ids: readonly string[],
+): Promise<string[]> {
+  const within = new Set(ids);
+  const missed = await missedQuestionIds(profile);
+  return missed.filter((id) => within.has(id));
+}
+
 export async function resetAllProgress(): Promise<void> {
   const database = await db();
   await database.runAsync('DELETE FROM progress');

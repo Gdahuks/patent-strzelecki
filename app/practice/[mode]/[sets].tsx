@@ -21,6 +21,7 @@ import { WEAK_SET_SLUG, content } from '../../../src/content/store';
 import type { Letter, Question } from '../../../src/content/types';
 import {
   type PracticeMode,
+  examMistakesAmong,
   loadCards,
   resetProgress,
   saveCard,
@@ -35,6 +36,7 @@ import {
   nextCard,
   shuffle,
 } from '../../../src/engine/leitner';
+import { examProfile } from '../../../src/engine/exam';
 import { plural } from '../../../src/engine/plural';
 import { useSettings } from '../../../src/settings/SettingsContext';
 import { useTheme } from '../../../src/theme';
@@ -44,7 +46,7 @@ import { useTheme } from '../../../src/theme';
 const HISTORY_LIMIT = 30;
 
 export default function ExerciseScreen() {
-  const params = useLocalSearchParams<{ mode: string; sets: string }>();
+  const params = useLocalSearchParams<{ mode: string; sets: string; bledy?: string }>();
   const mode: PracticeMode = params.mode === 'flashcards' ? 'flashcards' : 'test';
   const setSlugs = useMemo(() => params.sets.split(',').filter(Boolean), [params.sets]);
 
@@ -64,6 +66,14 @@ export default function ExerciseScreen() {
   // from the progress database, so its questions have to be loaded asynchronously, same as
   // the buckets themselves.
   const isWeak = setSlugs.length === 1 && setSlugs[0] === WEAK_SET_SLUG;
+  /**
+   * Narrows the set to the questions this exam profile has actually caught you on.
+   *
+   * A parameter on the ordinary route rather than a third virtual set: the set stays real and
+   * this only filters it, so the resolution path — and the two screens that share it — needs
+   * no new special case beyond „moje błędy".
+   */
+  const examProfileId = params.bledy;
   const [questions, setQuestions] = useState<Question[] | null>(null);
   const [deck, setDeck] = useState<DeckState | null>(null);
   const [currentId, setCurrentId] = useState<string | null>(null);
@@ -141,9 +151,17 @@ export default function ExerciseScreen() {
     let cancelled = false;
 
     void (async () => {
-      const pool = isWeak
+      const whole = isWeak
         ? content.questionsByIds(await weakQuestionIds(mode))
         : content.questionsForSets(setSlugs);
+      const pool = examProfileId
+        ? content.questionsByIds(
+            await examMistakesAmong(
+              examProfile(examProfileId).id,
+              whole.map((question) => question.id),
+            ),
+          )
+        : whole;
       if (cancelled) return;
 
       const ids = pool.map((question) => question.id);
@@ -162,7 +180,7 @@ export default function ExerciseScreen() {
     return () => {
       cancelled = true;
     };
-  }, [setSlugs, isWeak, mode, levels, advance]);
+  }, [setSlugs, isWeak, examProfileId, mode, levels, advance]);
 
   /**
    * The deck as seen by the refresh effect.
@@ -407,7 +425,10 @@ export default function ExerciseScreen() {
     );
   }, [questions, mode, levels, advance, cancelPendingAdvance]);
 
-  const title = content.titleForSets(setSlugs);
+  // The subset needs its own name, or the header would promise the whole area.
+  const title = examProfileId
+    ? `Pomyłki: ${content.titleForSets(setSlugs)}`
+    : content.titleForSets(setSlugs);
 
   const header = (
     <Stack.Screen

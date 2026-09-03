@@ -192,7 +192,7 @@ export default function EgzaminScreen() {
         profile={profile}
         attempts={standings.attempts}
         areas={standings.areas}
-        onOpen={(slug) => router.push(`/practice/test/${slug}`)}
+        onOpen={(slug) => router.push(`/area/${slug}?profile=${profile.id}`)}
       />
 
       <Button

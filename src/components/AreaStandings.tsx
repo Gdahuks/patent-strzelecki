@@ -31,8 +31,19 @@ const THRESHOLDS = {
   rest: 0.75,
 };
 
-/** Answers in one area before its percentage means anything. */
-const MIN_ANSWERS = 5;
+/**
+ * Answers in one area before its percentage means anything.
+ *
+ * Three, not five, and the reason is the weighted opening: the safety rules come up about once
+ * a paper while every other area gets two, so a bar of five would leave the one area whose
+ * questions fail the paper on their own mute for another two attempts after the table appears.
+ * At three the table speaks about all five rows the moment it shows up.
+ *
+ * Nothing is hidden by going this low, either — the counter sits right next to the percentage,
+ * so "0/3" discloses its own sample. A thin sample matters when the result is near the
+ * threshold, not when it is 0 out of 3.
+ */
+const MIN_ANSWERS = 3;
 
 /** Attempts before the table is worth showing at all. */
 const MIN_ATTEMPTS = 3;
