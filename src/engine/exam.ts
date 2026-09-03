@@ -24,18 +24,32 @@ import { shuffle } from './leitner';
 
 export type ExamProfileId = 'patent' | 'wpa';
 
-/**
- * One band of the paper: how many questions come from which subject area.
- *
- * `critical` marks the zero-tolerance group. Criticality is a property of the **layer**, not
- * of the question: an earlier version derived it from the question's lesson, and since 163 of
- * the 200 police-exam questions carry the lesson `uobia`, they kept landing in the group where
- * a single mistake fails the paper — while safety questions, 24 against a critical pool of
- * 415, were missing from it in 79% of papers.
- */
-export interface ExamLayer {
+/** One subject area a band can draw a slot from. */
+export interface ExamSource {
   /** Category slug, resolved to questions outside the engine. */
   category: string;
+  /**
+   * Probability that a slot of this band goes to this source.
+   *
+   * Omitted on exactly one source per band — that one takes whatever the shares leave, so a
+   * single-source band needs no numbers at all.
+   */
+  share?: number;
+  /** Most slots of one band this source may fill. */
+  max?: number;
+}
+
+/**
+ * One band of the paper: how many questions it holds and which areas they come from.
+ *
+ * `critical` marks the zero-tolerance group, and it is a property of the **band**, not of the
+ * question: an earlier version derived it from the question's lesson, and since 163 of the 200
+ * police-exam questions carry the lesson `uobia`, they kept landing in the group where a
+ * single mistake fails the paper — while safety questions, 24 against a critical pool of 415,
+ * were missing from it in 79% of papers.
+ */
+export interface ExamLayer {
+  sources: readonly ExamSource[];
   count: number;
   critical: boolean;
 }
@@ -62,15 +76,40 @@ export const PATENT_PROFILE: ExamProfile = {
   questionCount: 10,
   passThreshold: 9,
   timeLimitSeconds: 20 * 60,
-  // § 19 ust. 1: two questions from each of the five areas. The first two layers are the
-  // zero-tolerance group of ust. 6 — "pierwsze cztery pytania dotyczące UoBiA oraz zasad
-  // bezpieczeństwa" — so their order here is the order on the paper.
   layers: [
-    { category: 'zg-uobia', count: 2, critical: true },
-    { category: 'zg-bezpieczenstwo', count: 2, critical: true },
-    { category: 'zg-regulaminy', count: 2, critical: false },
-    { category: 'zg-budowa', count: 2, critical: false },
-    { category: 'zg-prawo-karne', count: 2, critical: false },
+    /**
+     * The zero-tolerance opening of § 19 ust. 6 — "pierwsze cztery pytania dotyczące UoBiA
+     * oraz zasad bezpieczeństwa".
+     *
+     * **A deliberate departure from ust. 1**, which asks for two questions from each of the
+     * five areas and thereby fixes this group at 2 + 2. We don't know how a real committee
+     * fills it: the regulation implies 2 + 2, while PZSS's own published question list falls
+     * into four topical blocks rather than five, and the only eyewitness account of an exam
+     * describes "the first four from UoBiA". The two readings are far apart where it costs
+     * most — with 2 + 2, half of the group comes from a 24-question pool anyone can learn by
+     * heart, so passing it is far likelier here than on a paper drawn the other way.
+     *
+     * So the group is one band of four with the safety rules weighted rather than counted:
+     * 31.6% of papers get none of them, 42.2% one, 26.2% two. That sits between the two
+     * readings instead of betting everything on either. The cap of two is not a fudge — no
+     * reading of reality produces three, so it removes a state only our own randomness
+     * invents.
+     *
+     * Back to the regulation's letter is two numbers: `share: 0.5` and `max: 2` become a
+     * second band of `count: 2`.
+     */
+    {
+      sources: [
+        { category: 'zg-uobia' },
+        { category: 'zg-bezpieczenstwo', share: 0.25, max: 2 },
+      ],
+      count: 4,
+      critical: true,
+    },
+    // § 19 ust. 1 for the rest of the paper: two questions from each remaining area.
+    { sources: [{ category: 'zg-regulaminy' }], count: 2, critical: false },
+    { sources: [{ category: 'zg-budowa' }], count: 2, critical: false },
+    { sources: [{ category: 'zg-prawo-karne' }], count: 2, critical: false },
   ],
 };
 
@@ -80,9 +119,9 @@ export const WPA_PROFILE: ExamProfile = {
   questionCount: 20,
   passThreshold: 18,
   timeLimitSeconds: 30 * 60,
-  // The whole paper from the course's copy of the official police question set. One layer
-  // rather than a special case, so both exams go through the same drawing code.
-  layers: [{ category: 'wpa', count: 20, critical: false }],
+  // The whole paper from the course's copy of the official police question set. One band with
+  // one source rather than a special case, so both exams go through the same drawing code.
+  layers: [{ sources: [{ category: 'wpa' }], count: 20, critical: false }],
 };
 
 /** Questions at the front of the paper that must all be correct. Zero means no such group. */
@@ -110,6 +149,15 @@ export interface ExamQuestion {
   /** Display order of the answers — shuffled so positions can't be memorized. */
   order: Letter[];
   critical: boolean;
+  /**
+   * The area this slot was drawn from.
+   *
+   * Recorded rather than derived, because 43 questions belong to two areas at once — the
+   * Act's own penal provisions sit in both the first and the fifth. Deriving it later would
+   * point a mistake at whichever area matched first, and the diagnosis would count those
+   * questions twice.
+   */
+  category: string;
 }
 
 export interface ExamAnswer {
@@ -117,6 +165,13 @@ export interface ExamAnswer {
   chosen: Letter | null;
   wasCorrect: boolean;
   critical: boolean;
+  /**
+   * The area the question was drawn from — see `ExamQuestion.category`.
+   *
+   * Optional because attempts saved before the paper had areas carry no such field, and those
+   * rows still have to open. Anything reading it has to cope with its absence.
+   */
+  category?: string;
 }
 
 export interface ExamResult {
@@ -213,54 +268,159 @@ export function latestMisses(
  *
  * @param fallbackLayers each layer's full pool, in profile order
  */
-export function buildPool(
-  preferred: Question[],
-  fallbackLayers: Question[][],
-  profile: ExamProfile,
-  random: () => number = Math.random,
-): Question[][] {
-  const pooledEarlier = new Set<string>();
-
-  return profile.layers.map((layer, index) => {
-    const full = fallbackLayers[index] ?? [];
-    const inLayer = new Set(full.map((question) => question.id));
-    const pool: Question[] = [];
-    const taken = new Set<string>();
-    for (const question of preferred) {
-      if (!inLayer.has(question.id) || taken.has(question.id)) continue;
-      pool.push(question);
-      taken.add(question.id);
-    }
-    const secured = () => pool.filter((question) => !pooledEarlier.has(question.id)).length;
-
-    // The top-up is drawn, not taken off the front of the layer. Walking `full` in bundle
-    // order made an exam from a single mistake the *same nine questions* every time — only
-    // their order changed — and the screen promises questions "dobierane z całej puli tego
-    // zagadnienia".
-    for (const question of shuffle(full, random)) {
-      if (secured() >= layer.count) break;
-      if (taken.has(question.id) || pooledEarlier.has(question.id)) continue;
-      pool.push(question);
-      taken.add(question.id);
-    }
-
-    // Refuse here rather than hand back a layer that cannot fill its slots: otherwise the
-    // draw's success depends on the seed, so the same mistakes would compose a paper on one
-    // tap and refuse on the next. The message names the layer, which is what the screen shows.
-    if (secured() < layer.count) {
-      throw new NotEnoughQuestionsError(
-        `warstwa ${layer.category} ma ${secured()} pytań, potrzeba ${layer.count}`,
-        layer.category,
-      );
-    }
-
-    for (const question of pool) pooledEarlier.add(question.id);
-    return pool;
-  });
+/** How one subject area stands: distinct questions asked, and how many are currently right. */
+export interface AreaTally {
+  seen: number;
+  correct: number;
 }
 
 /**
- * Draws the paper: `count` questions from each layer, critical layers first.
+ * Per-area standing, read out of past attempts — the answer to "what am I worst at".
+ *
+ * Counted by **distinct question, latest verdict wins** — the same rule the mistake pool uses
+ * (`latestMisses`), and for the same reason: it has to heal when someone improves. Two other
+ * readings were rejected. Raw accuracy over every answer never forgets a bad start, so a month
+ * of progress stays hidden behind it. And it can be inflated the other way: an area of 24
+ * questions can show "23/24" off six questions answered four times each, which reads as
+ * mastery of the area and isn't.
+ *
+ * `seen` is therefore also a coverage figure — "34/41" against an area of 295 questions says
+ * plainly that most of it hasn't been asked yet.
+ *
+ * Answers with no recorded area are skipped: those come from attempts saved before the paper
+ * was composed from areas, and the alternative — deriving the area from set membership — would
+ * count the Act's own penal provisions in two areas at once, which is exactly what recording
+ * the area avoids.
+ *
+ * @param attempts answers from past attempts, most recent first
+ */
+export function areaProgress(
+  attempts: readonly (readonly ExamAnswer[])[],
+): Map<string, AreaTally> {
+  const tally = new Map<string, AreaTally>();
+  const settled = new Set<string>();
+
+  for (const attempt of attempts) {
+    for (const answer of attempt) {
+      if (!answer.category || settled.has(answer.questionId)) continue;
+      settled.add(answer.questionId);
+
+      const entry = tally.get(answer.category) ?? { seen: 0, correct: 0 };
+      entry.seen += 1;
+      if (answer.wasCorrect) entry.correct += 1;
+      tally.set(answer.category, entry);
+    }
+  }
+
+  return tally;
+}
+
+export function buildPool(
+  preferred: Question[],
+  fallbackBands: Question[][][],
+  profile: ExamProfile,
+  random: () => number = Math.random,
+): Question[][][] {
+  const pooledEarlier = new Set<string>();
+
+  return profile.layers.map((layer, bandIndex) => {
+    // Every source keeps enough of its own questions to fill the band on its own. Topping the
+    // band up as a whole would let the mistakes decide the composition: six mistakes from the
+    // Act would leave the weighted safety source empty, and the paper would quietly stop
+    // asking about safety in the one group where a mistake fails it.
+    const pools = layer.sources.map((source, sourceIndex) => {
+      const full = fallbackBands[bandIndex]?.[sourceIndex] ?? [];
+      const inSource = new Set(full.map((question) => question.id));
+      const pool: Question[] = [];
+      const taken = new Set<string>();
+      for (const question of preferred) {
+        if (!inSource.has(question.id) || taken.has(question.id)) continue;
+        pool.push(question);
+        taken.add(question.id);
+      }
+      const secured = () => pool.filter((question) => !pooledEarlier.has(question.id)).length;
+      // A source may have to cover the whole band, so it needs `count` of its own — unless it
+      // is capped lower, in which case its cap is all it will ever be asked for.
+      const target = Math.min(layer.count, layer.sources[sourceIndex].max ?? layer.count);
+
+      // The top-up is drawn, not taken off the front. Walking the pool in bundle order made an
+      // exam from a single mistake the *same nine questions* every time — only their order
+      // changed — and the screen promises questions "dobierane z całej puli tego zagadnienia".
+      for (const question of shuffle(full, random)) {
+        if (secured() >= target) break;
+        if (taken.has(question.id) || pooledEarlier.has(question.id)) continue;
+        pool.push(question);
+        taken.add(question.id);
+      }
+      return { pool, secured: secured() };
+    });
+
+    // Refuse here rather than hand back a band that cannot fill its slots: otherwise the
+    // draw's success depends on the seed, so the same mistakes would compose a paper on one
+    // tap and refuse on the next. The message names the area, which is what the screen shows.
+    const available = pools.reduce((sum, entry) => sum + entry.secured, 0);
+    if (available < layer.count) {
+      const missing = layer.sources[0].category;
+      throw new NotEnoughQuestionsError(
+        `pasmo ${missing} ma ${available} pytań, potrzeba ${layer.count}`,
+        missing,
+      );
+    }
+
+    for (const entry of pools) {
+      for (const question of entry.pool) pooledEarlier.add(question.id);
+    }
+    return pools.map((entry) => entry.pool);
+  });
+}
+
+/** A question with the area it was drawn from, before the paper's order is settled. */
+interface Drawn {
+  question: Question;
+  category: string;
+}
+
+/**
+ * Which source of a band fills the next slot, or `null` when the band has run dry.
+ *
+ * Sources that hit their `max`, or have nothing unused left, drop out — so the roll always
+ * lands on a source that can actually deliver, and a band whose weighted source is exhausted
+ * quietly finishes from the other one instead of failing on some seeds and not others. That
+ * determinism matters more than the exact weights: a paper that composes only sometimes is
+ * the worst kind of bug to chase.
+ *
+ * @param roll one value in [0, 1) — passed in so the caller owns the randomness
+ */
+function pickSource(
+  layer: ExamLayer,
+  pools: Question[][],
+  filled: number[],
+  roll: number,
+): number | null {
+  const eligible = layer.sources
+    .map((source, index) => index)
+    .filter((index) => {
+      const { max } = layer.sources[index];
+      return pools[index].length > 0 && (max === undefined || filled[index] < max);
+    });
+  if (eligible.length === 0) return null;
+
+  const weighted = eligible.filter((index) => layer.sources[index].share !== undefined);
+  const remainder = eligible.filter((index) => layer.sources[index].share === undefined);
+
+  let left = roll;
+  for (const index of weighted) {
+    const share = layer.sources[index].share ?? 0;
+    if (left < share) return index;
+    left -= share;
+  }
+  // The roll fell past every share: it belongs to the source without one. When that source is
+  // the exhausted one, the band finishes from the weighted sources instead.
+  return remainder[0] ?? weighted[weighted.length - 1] ?? null;
+}
+
+/**
+ * Draws the paper: `count` questions from each band, critical bands first.
  *
  * A profile with no critical layer, like the police exam, comes out as one flat draw — no
  * special case needed, the critical group is simply empty.
@@ -268,37 +428,49 @@ export function buildPool(
  * @param layers each layer's pool, in the same order as `profile.layers`
  */
 export function drawExam(
-  layers: Question[][],
+  bands: Question[][][],
   profile: ExamProfile,
   random: () => number = Math.random,
 ): ExamQuestion[] {
-  const critical: Question[] = [];
-  const rest: Question[] = [];
+  const critical: Drawn[] = [];
+  const rest: Drawn[] = [];
   const taken = new Set<string>();
 
-  profile.layers.forEach((layer, index) => {
-    // Layers overlap, so what's already on the paper is off the table — otherwise a question
+  profile.layers.forEach((layer, bandIndex) => {
+    // Bands overlap, so what's already on the paper is off the table — otherwise a question
     // that is both a provision of the Act and a penal one could be asked twice. The same pass
-    // drops repeats **inside** one layer's pool: two copies of one question would otherwise
-    // both survive into the paper, and grading reads answers by question id, so a single
-    // answer would count twice — decisive when it lands in the critical four.
-    const unique = new Map<string, Question>();
-    for (const question of layers[index] ?? []) {
-      if (!taken.has(question.id)) unique.set(question.id, question);
-    }
-    const available = [...unique.values()];
+    // drops repeats **inside** a pool: two copies of one question would otherwise both survive
+    // into the paper, and grading reads answers by question id, so a single answer would count
+    // twice — decisive when it lands in the critical four.
+    const pools = layer.sources.map((source, sourceIndex) => {
+      const unique = new Map<string, Question>();
+      for (const question of bands[bandIndex]?.[sourceIndex] ?? []) {
+        if (!taken.has(question.id)) unique.set(question.id, question);
+      }
+      return shuffle([...unique.values()], random);
+    });
+    const filled = layer.sources.map(() => 0);
+    const drawn: Drawn[] = [];
 
-    // A thin layer does not borrow from the others. Borrowing would turn "two questions from
-    // each area" into a promise whose breaking is invisible — the paper would look complete.
-    if (available.length < layer.count) {
-      throw new NotEnoughQuestionsError(
-        `warstwa ${layer.category} ma ${available.length} pytań, potrzeba ${layer.count}`,
-        layer.category,
-      );
+    for (let slot = 0; slot < layer.count; slot += 1) {
+      const source = pickSource(layer, pools, filled, random());
+      // A band does not borrow from the others. Borrowing would turn "two questions from each
+      // area" into a promise whose breaking is invisible — the paper would look complete.
+      if (source === null) {
+        const missing = layer.sources[0].category;
+        throw new NotEnoughQuestionsError(
+          `pasmo ${missing} ma ${drawn.length} pytań, potrzeba ${layer.count}`,
+          missing,
+        );
+      }
+
+      const question = pools[source].pop();
+      if (!question) throw new Error('pickSource wskazał puste źródło');
+      filled[source] += 1;
+      taken.add(question.id);
+      drawn.push({ question, category: layer.sources[source].category });
     }
 
-    const drawn = shuffle(available, random).slice(0, layer.count);
-    for (const question of drawn) taken.add(question.id);
     (layer.critical ? critical : rest).push(...drawn);
   });
 
@@ -309,10 +481,11 @@ export function drawExam(
   // says nothing about their order inside the four, and leaving them layer-ordered would
   // teach that positions three and four are always the safety ones. The `critical` flag is
   // positional over the whole group, so shuffling within it costs nothing.
-  return [...shuffle(critical, random), ...shuffle(rest, random)].map((question, index) => ({
-    question,
-    order: shuffle(Object.keys(question.answers) as Letter[], random),
+  return [...shuffle(critical, random), ...shuffle(rest, random)].map((entry, index) => ({
+    question: entry.question,
+    order: shuffle(Object.keys(entry.question.answers) as Letter[], random),
     critical: index < critical.length,
+    category: entry.category,
   }));
 }
 
@@ -328,6 +501,7 @@ export function gradeExam(
       chosen: pick,
       wasCorrect: pick === entry.question.correct,
       critical: entry.critical,
+      category: entry.category,
     };
   });
 

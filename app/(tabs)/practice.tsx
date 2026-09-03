@@ -39,20 +39,17 @@ const MODES: { key: PracticeMode; label: string }[] = [
   { key: 'test', label: 'Test ABC' },
 ];
 
-/**
- * Which grouping the list shows.
+/*
+ * There is deliberately no second switch here for the exam's five subject areas.
  *
- * The course names its own sets after its lessons and legal acts; the exam is composed of the
- * five subject areas of the regulation. Both are useful and neither replaces the other, so
- * they are two views of the same questions rather than one merged list — which is also what
- * keeps the list from growing: five rows or fifteen, never twenty.
+ * One was built and removed: two identical-looking switches stacked read as one choice split
+ * in two, and two of the five areas are literally single course sets, so the list showed the
+ * same rows twice under different names. The areas answer a different question — "what am I
+ * worst at" — which is diagnosis, not browsing, so they live on the exam screen, where the
+ * answer comes from actual attempts, and a tap there opens the ABC quiz for that area. This
+ * list stays what it is: the course's own sets, in the course's own words, for the phase when
+ * someone is reading the lessons.
  */
-type Grouping = 'categories' | 'sets';
-
-const GROUPINGS: { key: Grouping; label: string }[] = [
-  { key: 'categories', label: 'Zagadnienia' },
-  { key: 'sets', label: 'Zestawy kursu' },
-];
 
 export default function CwiczeniaScreen() {
   const theme = useTheme();
@@ -62,9 +59,6 @@ export default function CwiczeniaScreen() {
   // Progress is separate per mode, so the list shows the one currently selected. It used to
   // be shared, and a separate "Postęp" tab duplicated the same list of sets.
   const [mode, setMode] = useState<PracticeMode>('flashcards');
-  // Defaults to the course's own sets — the list the owner has been using daily. Subject
-  // areas are the other view, one tap away, not a silent replacement of a familiar screen.
-  const [grouping, setGrouping] = useState<Grouping>('sets');
   const [rows, setRows] = useState<Row[] | null>(null);
   /** Bumping this recalculates the list without leaving the screen — after resetting a set. */
   const [reload, setReload] = useState(0);
@@ -81,8 +75,7 @@ export default function CwiczeniaScreen() {
         const weakIds = await weakQuestionIds(mode);
         if (cancelled) return;
 
-        const source = grouping === 'categories' ? content.categories : content.sets;
-        const sets: Row[] = source.map((set) => {
+        const sets: Row[] = content.sets.map((set) => {
           const progress = deckProgress(createDeck(set.questionIds, cards, levels));
           return {
             slug: set.slug,
@@ -125,7 +118,7 @@ export default function CwiczeniaScreen() {
       // rule can only see that it's unused inside, not that being a dependency is its only
       // job.
       // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [mode, grouping, levels, reload]),
+    }, [mode, levels, reload]),
   );
 
   /**
@@ -183,14 +176,7 @@ export default function CwiczeniaScreen() {
         <View style={styles.header}>
           <Text style={[styles.heading, { color: theme.text }]}>Ćwiczenia</Text>
 
-          <ModeSwitch options={MODES} value={mode} onChange={setMode} label="Tryb ćwiczenia" />
-
-          <ModeSwitch
-            options={GROUPINGS}
-            value={grouping}
-            onChange={setGrouping}
-            label="Podział pytań"
-          />
+          <ModeSwitch options={MODES} value={mode} onChange={setMode} />
 
           <Muted>
             {mode === 'flashcards'

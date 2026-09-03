@@ -6,24 +6,25 @@
  * zagadnień", followed by five areas. The word "losowanie" never appears about the written
  * part. So the sheet has a fixed shape, and this table is that shape.
  *
- * The table is deliberately import-free: both the exam engine (through `examPool`) and the
- * practice screen (through `store`) read it, and neither may end up importing the other.
+ * The table is deliberately import-free: the exam engine reads it through `examPool`, the
+ * store resolves an area's slug to questions, and neither may end up importing the other.
  *
  * Each area is a sum of the course's own question sets. We do not classify the course's
  * content question by question — that would mean maintaining our own taxonomy of someone
- * else's material through every content refresh. The cost of the cheap route is that one
- * label is an approximation: the course's "Ograniczenia broni ISSF" set holds both technical
- * data and descriptions of competitions, distances and penalties, so `budowa-i-dane` covers
- * a little more than its name says. Splitting it would need per-question tags, and the `law`
- * field can't do it either — "Skrócone dane regulaminowych ograniczeń broni" is the basis for
- * both "Wymiar pudełka pistoletów na 25m" and "Jakie konkurencje są strzelane na 25m".
+ * else's material through every content refresh. The price of the cheap route shows in one
+ * area: the course's "Ograniczenia broni ISSF" set holds technical data *and* descriptions of
+ * competitions, distances and penalties, so `zg-budowa` is named after both. Splitting it
+ * would need per-question tags, and the `law` field can't do it either — "Skrócone dane
+ * regulaminowych ograniczeń broni" is the basis for both "Wymiar pudełka pistoletów na 25m"
+ * and "Jakie konkurencje są strzelane na 25m".
  */
 
-/** One subject area of the exam, and one row in the practice screen's "Zagadnienia" view. */
+/** One subject area of the exam, and one row of the diagnosis on the exam screen. */
 export interface Category {
   /**
-   * Slug used both as a route parameter (`/practice/test/<slug>`) and as a layer reference in
-   * the exam profile. Prefixed so it can never collide with a course set slug.
+   * Slug used both as a route parameter (`/practice/test/<slug>`, which is how the diagnosis
+   * opens an area's quiz) and as a source reference in the exam profile. Prefixed so it can
+   * never collide with a course set slug.
    */
   slug: string;
   title: string;
@@ -60,7 +61,9 @@ export const CATEGORIES: readonly Category[] = [
   },
   {
     slug: 'zg-bezpieczenstwo',
-    title: 'Zasady bezpieczeństwa',
+    // The course's own name for the same set, deliberately: the area *is* that set, so a
+    // second name for it would only make someone wonder what the difference is.
+    title: 'Bezpieczeństwo w strzelectwie',
     // Maps 1:1 onto the PZSS document "Ogólne zasady bezpieczeństwa w strzelectwie
     // sportowym": all 18 points of its § 3 are covered, no question without a counterpart
     // and no point without a question.
@@ -74,17 +77,23 @@ export const CATEGORIES: readonly Category[] = [
     // (items 58-84, interleaved) — so PZSS does not isolate this area at all. Moving the
     // range rules under area 1 (they are a regulation issued under the Act) would be a
     // one-line change here.
-    title: 'Regulaminy strzeleckie',
+    title: 'Wzorowy regulamin strzelnicy',
     setSlugs: ['reg-strzelnicy'],
   },
   {
     slug: 'zg-budowa',
-    title: 'Budowa i dane techniczne broni',
+    // Named after what is inside, not after § 19 ust. 1 pkt 4. Of the 84 questions, 49 carry
+    // the lesson "Przepisy sportowe ISSF" (competitions, distances, penalties) and only 7
+    // "Budowa broni" — so a name promising construction would send someone back to the wrong
+    // lesson to fix a weak result.
+    title: 'Budowa broni i przepisy ISSF',
     setSlugs: ['bron', 'pzss-bron'],
   },
   {
     slug: 'zg-prawo-karne',
-    title: 'Prawo karne',
+    // Both course sets in the name: "Prawo karne" alone is also the name of one of them, and
+    // it has 49 questions against this area's 60 — same name, different number.
+    title: 'Prawo karne i obrona konieczna',
     setSlugs: ['prawo-karne', 'obrona-konieczna'],
   },
 ];

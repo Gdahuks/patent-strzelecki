@@ -5,7 +5,7 @@ import { fileURLToPath } from 'node:url';
 import { describe, it } from 'vitest';
 
 import { ALL_SET_SLUG, CATEGORIES } from './categories';
-import { profileAvailable, profileLayers } from './examPool';
+import { profileAvailable, profileBands } from './examPool';
 import type { ContentBundle } from './types';
 import { PATENT_PROFILE, WPA_PROFILE } from '../engine/exam';
 
@@ -92,17 +92,21 @@ describe.skipIf(!PRESENT)('subject areas on the real bundle', () => {
   });
 
   it('lets both profiles compose a paper from this bundle', () => {
-    // The one thing no unit test can see: the engine knows layers by slug and never resolves
-    // them, so a typo in `layers[].category` passes types, lint and every test on fixtures —
+    // The one thing no unit test can see: the engine knows areas by slug and never resolves
+    // them, so a typo in a source's category passes types, lint and every test on fixtures —
     // and then shows up as an exam quietly missing from the switch.
     for (const profile of [PATENT_PROFILE, WPA_PROFILE]) {
-      profileLayers(profile).forEach((questions, index) => {
-        const layer = profile.layers[index];
-        assert.ok(
-          questions.length >= layer.count,
-          `${profile.id}: warstwa ${layer.category} ma ${questions.length} pytań, `
-            + `potrzeba ${layer.count}`,
-        );
+      profileBands(profile).forEach((pools, bandIndex) => {
+        const layer = profile.layers[bandIndex];
+        pools.forEach((questions, sourceIndex) => {
+          const source = layer.sources[sourceIndex];
+          const needed = Math.min(layer.count, source.max ?? layer.count);
+          assert.ok(
+            questions.length >= needed,
+            `${profile.id}: źródło ${source.category} ma ${questions.length} pytań, `
+              + `potrzeba ${needed}`,
+          );
+        });
       });
 
       assert.ok(profileAvailable(profile), profile.id);

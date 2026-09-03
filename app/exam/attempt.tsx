@@ -20,7 +20,7 @@ import { ExamStrip } from '../../src/components/ExamStrip';
 import { positionLabel } from '../../src/content/answers';
 import { useBottomInset } from '../../src/components/safeArea';
 import { Button, Card, Muted } from '../../src/components/ui';
-import { profileLayers, profileMisses, profileQuestions } from '../../src/content/examPool';
+import { profileBands, profileMisses, profileQuestions } from '../../src/content/examPool';
 import { content } from '../../src/content/store';
 import type { Letter } from '../../src/content/types';
 import { missedQuestionIds, saveAttempt } from '../../src/db/database';
@@ -80,7 +80,7 @@ export default function ExamAttemptScreen() {
     let cancelled = false;
 
     void (async () => {
-      const fullLayers = profileLayers(profile);
+      const fullBands = profileBands(profile);
       // The pool is drawn exclusively from exam mistakes. Flashcards, the ABC quiz and the
       // exam are three independent progress tracks — mixing in questions flagged as needing
       // work from practice mode would blend the measurement with the training and desync the
@@ -92,16 +92,16 @@ export default function ExamAttemptScreen() {
       // Sharing them across profiles was tried and reported as a bug: a question missed on the
       // licence exam surfaced under WPA whenever it sat on the course's WPA list, so a profile
       // with no attempts at all still offered an exam built from mistakes in it.
-      const layers = fromWeak
+      const bands = fromWeak
         ? buildPool(
             profileMisses(await missedQuestionIds(profile.id), profileQuestions(profile)),
-            fullLayers,
+            fullBands,
             profile,
           )
-        : fullLayers;
+        : fullBands;
       if (cancelled) return;
 
-      const paper = drawExam(layers, profile);
+      const paper = drawExam(bands, profile);
       startedAt.current = Date.now();
       finished.current = false;
       setRemaining(profile.timeLimitSeconds);
@@ -446,6 +446,10 @@ function ExamSummary({
   const paddingBottom = useBottomInset(32);
   const mistakes = result.answers.filter((answer) => !answer.wasCorrect);
   const correct = result.answers.filter((answer) => answer.wasCorrect);
+  /** Areas the mistakes came from, each named once. */
+  const weakAreas = [
+    ...new Set(mistakes.map((answer) => answer.category).filter((slug): slug is string => !!slug)),
+  ].map((slug) => content.titleForSets([slug]));
 
   // The summary replaces the screen without a navigation event, so a screen reader doesn't
   // read it on its own — and the verdict is the one thing the exam is taken for.
@@ -482,6 +486,10 @@ function ExamSummary({
           </Text>
         ) : null}
         {result.passed ? <Muted>Taki wynik zalicza prawdziwy egzamin.</Muted> : null}
+        {/* Which areas the mistakes fell in — one line, not a link on every card. The card
+            already carries the lesson and the legal basis, and the exam screen's own table of
+            areas is one tap away with more context than a single paper can give. */}
+        {weakAreas.length > 0 ? <Muted>Błędy w zagadnieniach: {weakAreas.join(', ')}.</Muted> : null}
         <Muted>Czas rozwiązywania: {solvingTime(elapsed)}</Muted>
       </Card>
 

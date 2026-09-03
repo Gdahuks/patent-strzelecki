@@ -11,26 +11,31 @@ import { content } from './store';
 import { type ExamProfile, NotEnoughQuestionsError, drawExam } from '../engine/exam';
 
 /**
- * Each layer's questions, in the profile's order — the shape `drawExam` and `buildPool` want.
+ * Every band's questions, one pool per source — the shape `drawExam` and `buildPool` want.
  *
- * A layer names its category by slug and `questionsForSets` resolves both categories and plain
- * course sets, so the police exam (one layer, the course's `wpa` set) needs no special case.
+ * A source names its category by slug and `questionsForSets` resolves both categories and
+ * plain course sets, so the police exam (one band, one source, the course's `wpa` set) needs
+ * no special case.
  */
-export function profileLayers(profile: ExamProfile): Question[][] {
-  return profile.layers.map((layer) => content.questionsForSets([layer.category]));
+export function profileBands(profile: ExamProfile): Question[][][] {
+  return profile.layers.map((layer) =>
+    layer.sources.map((source) => content.questionsForSets([source.category])),
+  );
 }
 
-/** Every question the profile can ask, deduplicated — layers overlap. */
+/** Every question the profile can ask, deduplicated — bands overlap. */
 export function profileQuestions(profile: ExamProfile): Question[] {
-  return content.questionsForSets(profile.layers.map((layer) => layer.category));
+  return content.questionsForSets(
+    profile.layers.flatMap((layer) => layer.sources.map((source) => source.category)),
+  );
 }
 
 /**
  * Whether this build's bundle can actually serve the profile.
  *
  * Answered by composing one paper and seeing whether it holds — not by counting. A pool of
- * 456 says nothing when one area lost its set, and counting per layer is not enough either:
- * the areas overlap, so an earlier layer can take away everything a later one had. Two areas
+ * 456 says nothing when one area lost its set, and counting per band is not enough either:
+ * the areas overlap, so an earlier band can take away everything a later one had. Two areas
  * of two questions each, holding the same two questions, pass every arithmetic check and
  * still cannot make a paper.
  *
@@ -39,7 +44,7 @@ export function profileQuestions(profile: ExamProfile): Question[] {
  */
 export function profileAvailable(profile: ExamProfile): boolean {
   try {
-    drawExam(profileLayers(profile), profile);
+    drawExam(profileBands(profile), profile);
     return true;
   } catch (error) {
     if (error instanceof NotEnoughQuestionsError) return false;

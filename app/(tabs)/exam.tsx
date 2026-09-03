@@ -2,10 +2,12 @@ import { useFocusEffect, useRouter } from 'expo-router';
 import { useCallback, useMemo, useState } from 'react';
 import { Alert, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
+import { AreaStandings } from '../../src/components/AreaStandings';
 import { Button, Card, ModeSwitch, Muted } from '../../src/components/ui';
 import { profileAvailable, profileMisses, profileQuestions } from '../../src/content/examPool';
 import {
   type StoredAttempt,
+  areaStandings,
   clearAttempts,
   deleteAttempt,
   missedQuestionIds,
@@ -13,6 +15,7 @@ import {
 } from '../../src/db/database';
 import {
   EXAM_PROFILES,
+  type AreaTally,
   type ExamProfileId,
   PATENT_PROFILE,
   examProfile,
@@ -71,6 +74,12 @@ export default function EgzaminScreen() {
    */
   const [missedCount, setMissedCount] = useState(0);
 
+  /** Per-area standing, and how many attempts it rests on. */
+  const [standings, setStandings] = useState<{ attempts: number; areas: Map<string, AreaTally> }>({
+    attempts: 0,
+    areas: new Map(),
+  });
+
   const pool = useMemo(() => profileQuestions(profile), [profile]);
 
   const refresh = useCallback(() => {
@@ -78,6 +87,7 @@ export default function EgzaminScreen() {
     void missedQuestionIds(profile.id).then((ids) =>
       setMissedCount(profileMisses(ids, pool).length),
     );
+    void areaStandings(profile.id).then(setStandings);
   }, [profile, pool]);
 
   useFocusEffect(refresh);
@@ -94,6 +104,7 @@ export default function EgzaminScreen() {
     setProfileId(id);
     setAttempts(null);
     setMissedCount(0);
+    setStandings({ attempts: 0, areas: new Map() });
   }, []);
 
   const onDelete = useCallback(
@@ -162,9 +173,9 @@ export default function EgzaminScreen() {
         </Text>
         {criticals > 0 ? (
           <Muted>
-            Po dwa pytania z pięciu zagadnień, zgodnie z regulaminem PZSS. Pierwsze {criticals} —
-            z UoBiA i zasad bezpieczeństwa: każdy błąd w nich oznacza niezdanie niezależnie od
-            reszty wyniku.
+            Pierwsze {criticals} pytania — z UoBiA i zasad bezpieczeństwa — muszą być bezbłędne;
+            ile z nich jest o bezpieczeństwie, jest losowe (0–2). Dalej po dwa pytania
+            z pozostałych trzech zagadnień.
           </Muted>
         ) : (
           <Muted>
@@ -176,6 +187,13 @@ export default function EgzaminScreen() {
           Kolejność pytań i odpowiedzi jest losowana, żeby nie dało się wkuwać pozycji.
         </Muted>
       </Card>
+
+      <AreaStandings
+        profile={profile}
+        attempts={standings.attempts}
+        areas={standings.areas}
+        onOpen={(slug) => router.push(`/practice/test/${slug}`)}
+      />
 
       <Button
         label="Rozpocznij egzamin"

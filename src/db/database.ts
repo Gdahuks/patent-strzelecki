@@ -9,7 +9,7 @@
 
 import * as SQLite from 'expo-sqlite';
 
-import { type ExamProfileId, latestMisses } from '../engine/exam';
+import { type AreaTally, type ExamProfileId, areaProgress, latestMisses } from '../engine/exam';
 import type { Card } from '../engine/leitner';
 
 const DATABASE = 'patent.db';
@@ -420,6 +420,39 @@ export interface AttemptAnswer {
   chosen: 'A' | 'B' | 'C' | null;
   wasCorrect: boolean;
   critical: boolean;
+  /** Subject area the question was drawn from; absent on attempts saved before areas. */
+  category?: string;
+}
+
+/**
+ * Per-area standing for one exam, plus how many attempts it rests on.
+ *
+ * Read through the same path as the mistake pool: this function does the reading, the rule
+ * lives in `areaProgress` and is tested without a database. Only attempts that recorded their
+ * areas are counted, so `attempts` is not the profile's whole history.
+ */
+export async function areaStandings(
+  profile: ExamProfileId,
+): Promise<{ attempts: number; areas: Map<string, AreaTally> }> {
+  const database = await db();
+  const rows = await database.getAllAsync<{ answers: string }>(
+    'SELECT answers FROM exam_attempts WHERE profile = ? ORDER BY finished_at DESC',
+    [profile],
+  );
+
+  const parsed: AttemptAnswer[][] = [];
+  for (const row of rows) {
+    try {
+      const answers = JSON.parse(row.answers) as AttemptAnswer[];
+      // An attempt from before the change carries no areas and would only inflate the count
+      // of attempts the numbers rest on.
+      if (answers.some((answer) => answer.category)) parsed.push(answers);
+    } catch {
+      // A corrupted entry is skipped — the rest of the history is still useful.
+    }
+  }
+
+  return { attempts: parsed.length, areas: areaProgress(parsed) };
 }
 
 export interface AttemptDetail extends StoredAttempt {

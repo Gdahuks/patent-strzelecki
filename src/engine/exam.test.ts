@@ -11,6 +11,7 @@ import {
   latestMisses,
   unansweredNumbers,
   criticalCount,
+  areaProgress,
   drawExam,
   formatRemaining,
   gradeExam,
@@ -20,7 +21,6 @@ import {
 const QUESTION_COUNT = PATENT_PROFILE.questionCount;
 const CRITICAL_COUNT = criticalCount(PATENT_PROFILE);
 const PASS_THRESHOLD = PATENT_PROFILE.passThreshold;
-const LAYER_COUNT = PATENT_PROFILE.layers.length;
 
 function question(id: string, lesson = 'uobia', correct: Letter = 'A'): Question {
   return {
@@ -34,25 +34,36 @@ function question(id: string, lesson = 'uobia', correct: Letter = 'A'): Question
 }
 
 /**
- * One pool per layer, each holding `size` questions whose ids carry the layer number.
+ * Pools for the licence profile: one array per band, one pool per source inside it.
  *
- * The id prefix is what lets a test assert "two questions from every area" without the
- * engine having to expose which layer a drawn question came from.
+ * Ids carry a letter per source, which is how a test can assert "four from the Act and the
+ * safety rules, two from each of the rest" without the engine having to report where a drawn
+ * question came from.
  */
-function layers(...sizes: number[]): Question[][] {
-  return sizes.map((size, layer) =>
-    Array.from({ length: size }, (_, i) => question(`l${layer}q${i}`)),
-  );
+function pool(letter: string, size: number): Question[] {
+  return Array.from({ length: size }, (_, i) => question(`${letter}${i}`));
 }
 
-/** Layer pools big enough for any licence paper. */
-function full(): Question[][] {
-  return layers(...Array.from({ length: LAYER_COUNT }, () => 20));
+interface Sizes {
+  uobia?: number;
+  bezpieczenstwo?: number;
+  regulaminy?: number;
+  budowa?: number;
+  karne?: number;
 }
 
-/** Which layer a drawn question came from, read back from its id. */
-function layerOf(entry: { question: Question }): number {
-  return Number(/^l(\d+)q/.exec(entry.question.id)![1]);
+function full(sizes: Sizes = {}): Question[][][] {
+  return [
+    [pool('u', sizes.uobia ?? 20), pool('b', sizes.bezpieczenstwo ?? 20)],
+    [pool('r', sizes.regulaminy ?? 20)],
+    [pool('d', sizes.budowa ?? 20)],
+    [pool('k', sizes.karne ?? 20)],
+  ];
+}
+
+/** One band with one pool — the police profile's shape. */
+function single(size: number): Question[][][] {
+  return [[pool('w', size)]];
 }
 
 /** Deterministic generator — tests can't depend on Math.random. */
@@ -64,6 +75,16 @@ function seeded(seed: number): () => number {
   };
 }
 
+/** Which source a drawn question came from, read back off its id. */
+function sourceOf(entry: { question: Question }): string {
+  return entry.question.id[0];
+}
+
+/** How many of the paper's first four came from the safety rules. */
+function safetyInCritical(exam: { question: Question }[]): number {
+  return exam.slice(0, CRITICAL_COUNT).filter((entry) => sourceOf(entry) === 'b').length;
+}
+
 describe('drawExam', () => {
   it('always draws a full set', () => {
     const exam = drawExam(full(), PATENT_PROFILE, seeded(1));
@@ -71,29 +92,55 @@ describe('drawExam', () => {
     assert.equal(exam.length, QUESTION_COUNT);
   });
 
-  it('takes exactly the asked-for count from every layer', () => {
-    // § 19 ust. 1 — the whole point of the change. A flat draw satisfied the total and left
-    // whole areas off the paper.
+  it('takes exactly the asked-for count from every band', () => {
+    // § 19 ust. 1 for the paper's tail. A flat draw satisfied the total and left whole areas
+    // off the sheet.
     const exam = drawExam(full(), PATENT_PROFILE, seeded(7));
+    const from = (letter: string) => exam.filter((entry) => sourceOf(entry) === letter).length;
 
-    PATENT_PROFILE.layers.forEach((layer, index) => {
-      assert.equal(exam.filter((entry) => layerOf(entry) === index).length, layer.count);
-    });
+    assert.equal(from('u') + from('b'), 4);
+    assert.equal(from('r'), 2);
+    assert.equal(from('d'), 2);
+    assert.equal(from('k'), 2);
   });
 
-  it('opens the paper with the critical layers', () => {
+  it('opens the paper with the critical band', () => {
     const exam = drawExam(full(), PATENT_PROFILE, seeded(7));
-    const criticalLayers = PATENT_PROFILE.layers
-      .map((layer, index) => ({ layer, index }))
-      .filter((entry) => entry.layer.critical)
-      .map((entry) => entry.index);
 
     for (let i = 0; i < CRITICAL_COUNT; i += 1) {
       assert.equal(exam[i].critical, true);
-      assert.ok(criticalLayers.includes(layerOf(exam[i])));
+      assert.ok(['u', 'b'].includes(sourceOf(exam[i])), sourceOf(exam[i]));
     }
     for (let i = CRITICAL_COUNT; i < exam.length; i += 1) {
       assert.equal(exam[i].critical, false);
+    }
+  });
+
+  it('weights the safety rules into the critical band without ever exceeding two', () => {
+    // The whole point of the band: neither absent (as a flat draw made them) nor fixed at two
+    // (as the regulation's letter would). Three or four is a state no reading of a real paper
+    // produces, so the cap removes it.
+    const seen = new Map<number, number>();
+    for (let seed = 1; seed <= 400; seed += 1) {
+      const count = safetyInCritical(drawExam(full(), PATENT_PROFILE, seeded(seed)));
+      seen.set(count, (seen.get(count) ?? 0) + 1);
+    }
+
+    assert.deepEqual([...seen.keys()].sort((a, b) => a - b), [0, 1, 2]);
+    for (const count of [0, 1, 2]) {
+      assert.ok((seen.get(count) ?? 0) > 0, `nigdy nie wypadło ${count}`);
+    }
+  });
+
+  it('fills the critical band from the Act alone once the safety rules run out', () => {
+    // Deterministically: a band whose weighted source is exhausted must finish from the other
+    // one, not fail on some seeds and not others.
+    const pools = full({ bezpieczenstwo: 0 });
+
+    for (let seed = 1; seed <= 40; seed += 1) {
+      const exam = drawExam(pools, PATENT_PROFILE, seeded(seed));
+      assert.equal(exam.length, QUESTION_COUNT);
+      assert.equal(safetyInCritical(exam), 0);
     }
   });
 
@@ -104,13 +151,26 @@ describe('drawExam', () => {
     assert.equal(new Set(ids).size, ids.length);
   });
 
-  it('does not repeat a question that belongs to two layers', () => {
+  it('does not repeat a question that belongs to two areas', () => {
     // 43 questions in the bundle are penal provisions of the Act itself, so they sit in both
     // the first area and the fifth. Without dedup the same question could be asked twice.
     const shared = question('shared');
     const pools = full();
-    pools[0] = [shared, ...pools[0]];
-    pools[4] = [shared, ...pools[4]];
+    pools[0][0] = [shared, ...pools[0][0]];
+    pools[3][0] = [shared, ...pools[3][0]];
+
+    for (let seed = 1; seed <= 40; seed += 1) {
+      const ids = drawExam(pools, PATENT_PROFILE, seeded(seed)).map((e) => e.question.id);
+      assert.equal(new Set(ids).size, ids.length);
+    }
+  });
+
+  it('ignores a question repeated inside one pool', () => {
+    // A duplicate would otherwise reach the paper twice, and grading reads answers by
+    // question id — so one answer would count for both, decisively so in the critical band.
+    const twice = question('u0');
+    const pools = full();
+    pools[0][0] = [twice, twice, question('u1'), question('u2'), question('u3'), question('u4')];
 
     for (let seed = 1; seed <= 40; seed += 1) {
       const ids = drawExam(pools, PATENT_PROFILE, seeded(seed)).map((e) => e.question.id);
@@ -136,17 +196,22 @@ describe('drawExam', () => {
     assert.notDeepEqual(first, second);
   });
 
-  it('does not leak the layer structure into the question order', () => {
-    // Layer-by-layer order would make question seven always a range-rules one, and positions
+  it('draws the same paper twice from the same seed', () => {
+    const first = drawExam(full(), PATENT_PROFILE, seeded(77)).map((e) => e.question.id);
+    const second = drawExam(full(), PATENT_PROFILE, seeded(77)).map((e) => e.question.id);
+
+    assert.deepEqual(first, second);
+  });
+
+  it('does not leak the band structure into the question order', () => {
+    // Band-by-band order would make question seven always a range-rules one, and positions
     // learnable. Both halves of the paper are shuffled, the critical one included — and the
     // critical half needs its own assertion, because the tail alone produces enough variety
-    // to keep a whole-paper check green while positions three and four stay the safety ones.
+    // to keep a whole-paper check green while the safety questions always sit last in it.
     const papers = new Set<string>();
     const heads = new Set<string>();
-    for (let seed = 1; seed <= 30; seed += 1) {
-      const pattern = drawExam(full(), PATENT_PROFILE, seeded(seed)).map((entry) =>
-        layerOf(entry),
-      );
+    for (let seed = 1; seed <= 40; seed += 1) {
+      const pattern = drawExam(full(), PATENT_PROFILE, seeded(seed)).map(sourceOf);
       papers.add(pattern.join(''));
       heads.add(pattern.slice(0, CRITICAL_COUNT).join(''));
     }
@@ -155,49 +220,27 @@ describe('drawExam', () => {
     assert.ok(heads.size > 1, 'kolejność w czwórce krytycznej jest stała');
   });
 
-  it('draws the same paper twice from the same seed', () => {
-    const first = drawExam(full(), PATENT_PROFILE, seeded(77)).map((e) => e.question.id);
-    const second = drawExam(full(), PATENT_PROFILE, seeded(77)).map((e) => e.question.id);
-
-    assert.deepEqual(first, second);
-  });
-
-  it('ignores a question repeated inside one layer pool', () => {
-    // A duplicate would otherwise reach the paper twice, and grading reads answers by
-    // question id — so one answer would count for both, decisively so in the critical four.
-    const twice = question('l0q0');
-    const pools = full();
-    pools[0] = [twice, twice, question('l0q1'), question('l0q2')];
-
-    for (let seed = 1; seed <= 40; seed += 1) {
-      const ids = drawExam(pools, PATENT_PROFILE, seeded(seed)).map((e) => e.question.id);
-      assert.equal(new Set(ids).size, ids.length);
-    }
-  });
-
-  it('fails loudly when a layer is too thin, naming it', () => {
-    const pools = full();
-    pools[2] = pools[2].slice(0, 1);
+  it('fails loudly when a band is too thin, naming its area', () => {
+    const pools = full({ regulaminy: 1 });
 
     assert.throws(
       () => drawExam(pools, PATENT_PROFILE, seeded(1)),
       (error: Error) =>
         error instanceof NotEnoughQuestionsError
-        && error.message.includes(PATENT_PROFILE.layers[2].category),
+        && error.category === PATENT_PROFILE.layers[1].sources[0].category,
     );
   });
 
-  it('does not borrow from another layer to fill a thin one', () => {
+  it('does not borrow from another band to fill a thin one', () => {
     // Borrowing would keep the paper looking complete while quietly breaking "two from each
     // area" — the promise whose breach is invisible.
-    const pools = full();
-    pools[3] = [];
+    const pools = full({ budowa: 0 });
 
     assert.throws(() => drawExam(pools, PATENT_PROFILE, seeded(1)), NotEnoughQuestionsError);
   });
 
-  it('draws the police paper as one flat layer', () => {
-    const exam = drawExam(layers(60), WPA_PROFILE, seeded(4));
+  it('draws the police paper as one flat band', () => {
+    const exam = drawExam(single(60), WPA_PROFILE, seeded(4));
 
     assert.equal(exam.length, WPA_PROFILE.questionCount);
     assert.ok(exam.every((entry) => entry.critical === false));
@@ -300,22 +343,88 @@ describe('lifecycle of the exam-from-mistakes pool', () => {
   it('the pool rests solely on exam mistakes, the database fills in the rest', () => {
     // The exam is a separate progress track: practice progress doesn't contribute a
     // single question here.
-    const missed = latestMisses(history([miss('l0q1'), miss('l3q2'), miss('l4q0')]));
+    const missed = latestMisses(history([miss('u1'), miss('d2'), miss('k0')]));
 
-    assert.deepEqual(missed, ['l0q1', 'l3q2', 'l4q0']);
+    assert.deepEqual(missed, ['u1', 'd2', 'k0']);
 
-    const pools = buildPool(
+    const bands = buildPool(
       missed.map((id) => question(id)),
       full(),
       PATENT_PROFILE,
     );
 
-    // Every mistake stays in its own area, and the rest of each layer is topped up so the
+    // Every mistake stays in its own area, and the rest of each band is topped up so the
     // paper can still be drawn.
-    assert.ok(pools[0].some((entry) => entry.id === 'l0q1'));
-    assert.ok(pools[3].some((entry) => entry.id === 'l3q2'));
-    assert.ok(pools[4].some((entry) => entry.id === 'l4q0'));
-    assert.doesNotThrow(() => drawExam(pools, PATENT_PROFILE, seeded(9)));
+    assert.ok(bands[0][0].some((entry) => entry.id === 'u1'));
+    assert.ok(bands[2][0].some((entry) => entry.id === 'd2'));
+    assert.ok(bands[3][0].some((entry) => entry.id === 'k0'));
+    assert.doesNotThrow(() => drawExam(bands, PATENT_PROFILE, seeded(9)));
+  });
+});
+
+describe('areaProgress', () => {
+  const answer = (
+    questionId: string,
+    wasCorrect: boolean,
+    category?: string,
+  ) => ({ questionId, chosen: 'A' as Letter, wasCorrect, critical: false, category });
+
+  it('counts a question once, however many times it was asked', () => {
+    // The area of safety rules holds 24 questions; six of them answered four times each must
+    // not read as twenty-four answered once.
+    const tally = areaProgress([
+      [answer('a', true, 'zg-bezpieczenstwo')],
+      [answer('a', true, 'zg-bezpieczenstwo')],
+      [answer('a', true, 'zg-bezpieczenstwo')],
+    ]);
+
+    assert.deepEqual(tally.get('zg-bezpieczenstwo'), { seen: 1, correct: 1 });
+  });
+
+  it('takes the latest verdict, so it heals when someone improves', () => {
+    // Attempts come newest first. Raw accuracy would keep the old mistake in the average
+    // forever; here the newer answer replaces it.
+    const tally = areaProgress([
+      [answer('a', true, 'zg-regulaminy')],
+      [answer('a', false, 'zg-regulaminy')],
+    ]);
+
+    assert.deepEqual(tally.get('zg-regulaminy'), { seen: 1, correct: 1 });
+  });
+
+  it('and drops back when the latest answer is wrong again', () => {
+    const tally = areaProgress([
+      [answer('a', false, 'zg-regulaminy')],
+      [answer('a', true, 'zg-regulaminy')],
+    ]);
+
+    assert.deepEqual(tally.get('zg-regulaminy'), { seen: 1, correct: 0 });
+  });
+
+  it('keeps the areas apart', () => {
+    const tally = areaProgress([
+      [
+        answer('a', true, 'zg-uobia'),
+        answer('b', false, 'zg-uobia'),
+        answer('c', true, 'zg-budowa'),
+      ],
+    ]);
+
+    assert.deepEqual(tally.get('zg-uobia'), { seen: 2, correct: 1 });
+    assert.deepEqual(tally.get('zg-budowa'), { seen: 1, correct: 1 });
+  });
+
+  it('skips answers from attempts saved before the paper had areas', () => {
+    // Deriving the area from set membership instead would count the Act's own penal
+    // provisions in two areas at once — the very thing recording the area avoids.
+    const tally = areaProgress([[answer('a', true), answer('b', true, 'zg-uobia')]]);
+
+    assert.equal(tally.size, 1);
+    assert.deepEqual(tally.get('zg-uobia'), { seen: 1, correct: 1 });
+  });
+
+  it('gives an empty tally for an empty history', () => {
+    assert.equal(areaProgress([]).size, 0);
   });
 });
 
@@ -348,97 +457,88 @@ describe('latestMisses', () => {
 
 describe('buildPool', () => {
   const preferred = (...ids: string[]) => ids.map((id) => question(id));
+  const flat = (bands: Question[][][]) => bands.flat(2).map((entry) => entry.id);
 
-  it('keeps every preferred question in its own layer', () => {
-    const pools = buildPool(preferred('l0q3', 'l4q2'), full(), PATENT_PROFILE);
+  it('keeps every preferred question in its own area', () => {
+    const bands = buildPool(preferred('u3', 'k2'), full(), PATENT_PROFILE);
 
-    assert.ok(pools[0].some((entry) => entry.id === 'l0q3'));
-    assert.ok(pools[4].some((entry) => entry.id === 'l4q2'));
+    assert.ok(bands[0][0].some((entry) => entry.id === 'u3'));
+    assert.ok(bands[3][0].some((entry) => entry.id === 'k2'));
   });
 
-  it('tops every layer up on its own when the mistakes are lopsided', () => {
-    // Six mistakes, all from one area. Topping up globally looked like a full pool and the
-    // draw then failed on the layer that had nothing — the screen hung on its spinner.
-    const lopsided = preferred('l0q0', 'l0q1', 'l0q2', 'l0q3', 'l0q4', 'l0q5');
+  it('tops every band up on its own when the mistakes are lopsided', () => {
+    // Six mistakes, all from the Act. Topping up globally looked like a full pool and the
+    // draw then failed on the band that had nothing — the screen hung on its spinner.
+    const lopsided = preferred('u0', 'u1', 'u2', 'u3', 'u4', 'u5');
 
-    const pools = buildPool(lopsided, full(), PATENT_PROFILE);
+    const bands = buildPool(lopsided, full(), PATENT_PROFILE);
 
-    PATENT_PROFILE.layers.forEach((layer, index) => {
-      assert.ok(pools[index].length >= layer.count, `warstwa ${index}`);
-    });
-    assert.doesNotThrow(() => drawExam(pools, PATENT_PROFILE, seeded(13)));
+    assert.doesNotThrow(() => drawExam(bands, PATENT_PROFILE, seeded(13)));
+  });
+
+  it('keeps the safety rules drawable even when every mistake is from the Act', () => {
+    // Per-band top-up is not enough here: the Act alone could fill all four slots, and the
+    // paper would quietly stop asking about safety in the group where a mistake fails it.
+    const bands = buildPool(preferred('u0', 'u1', 'u2', 'u3'), full(), PATENT_PROFILE);
+
+    assert.ok(bands[0][1].length >= 2, 'źródło bezpieczeństwa zostało puste');
   });
 
   it('a single mistake still yields a drawable paper', () => {
-    const pools = buildPool(preferred('l2q7'), full(), PATENT_PROFILE);
+    const bands = buildPool(preferred('r7'), full(), PATENT_PROFILE);
 
-    assert.doesNotThrow(() => drawExam(pools, PATENT_PROFILE, seeded(5)));
+    assert.doesNotThrow(() => drawExam(bands, PATENT_PROFILE, seeded(5)));
   });
 
   it('no mistakes at all yields a drawable paper', () => {
-    const pools = buildPool([], full(), PATENT_PROFILE);
+    const bands = buildPool([], full(), PATENT_PROFILE);
 
-    assert.doesNotThrow(() => drawExam(pools, PATENT_PROFILE, seeded(2)));
+    assert.doesNotThrow(() => drawExam(bands, PATENT_PROFILE, seeded(2)));
   });
 
-  it('does not repeat a question inside a layer', () => {
-    const pools = buildPool(preferred('l1q0', 'l1q0'), full(), PATENT_PROFILE);
+  it('does not repeat a question inside a pool', () => {
+    const bands = buildPool(preferred('r0', 'r0'), full(), PATENT_PROFILE);
+    const ids = flat(bands);
 
-    for (const layerPool of pools) {
-      const ids = layerPool.map((entry) => entry.id);
-      assert.equal(new Set(ids).size, ids.length);
-    }
+    assert.equal(new Set(ids).size, ids.length);
   });
 
-  it('a shared question in an early layer does not starve a later one', () => {
-    // The draw dedupes across the paper, so a top-up counting questions an earlier layer
-    // already holds would leave the later layer one short at draw time.
-    const shared = question('shared');
-    const pools = full();
-    pools[0] = [shared, ...pools[0]];
-    pools[4] = [shared, question('l4q0'), question('l4q1')];
-
-    const built = buildPool([shared], pools, PATENT_PROFILE);
-
-    assert.doesNotThrow(() => drawExam(built, PATENT_PROFILE, seeded(8)));
-  });
-
-  it('refuses a layer it cannot fill, instead of handing back a short pool', () => {
-    // Handing back a pool of one for a layer that needs two made the *draw* fail — and only
+  it('refuses a band it cannot fill, instead of handing back a short pool', () => {
+    // Handing back a pool of one for a band that needs two made the *draw* fail — and only
     // for some seeds, so the same mistakes composed a paper on one tap and refused on the
-    // next. The refusal belongs here, where the shortage is known, and names the layer.
+    // next. The refusal belongs here, where the shortage is known, and names the area.
     assert.throws(
-      () => buildPool(preferred('l0q0'), [[], [], [], [], []], PATENT_PROFILE),
+      () => buildPool(preferred('u0'), [[[], []], [[]], [[]], [[]]], PATENT_PROFILE),
       (error: Error) =>
         error instanceof NotEnoughQuestionsError
-        && error.category === PATENT_PROFILE.layers[0].category,
+        && error.category === PATENT_PROFILE.layers[0].sources[0].category,
     );
   });
 
-  it('refuses deterministically when a shared question leaves a later layer short', () => {
+  it('refuses deterministically when a shared question leaves a later band short', () => {
     // Two areas holding the same two questions: every count checks out, and the paper still
     // cannot be composed. Whether it fails must not depend on the seed.
     const shared = [question('s0'), question('s1')];
-    const pools = full();
-    pools[0] = [...shared];
-    pools[4] = [...shared];
+    const bands = full();
+    bands[0][0] = [...shared];
+    bands[3][0] = [...shared];
 
-    assert.throws(() => buildPool([], pools, PATENT_PROFILE), NotEnoughQuestionsError);
+    assert.throws(() => buildPool([], bands, PATENT_PROFILE), NotEnoughQuestionsError);
   });
 
-  it('ignores a mistake that belongs to no layer', () => {
-    const pools = buildPool(preferred('spoza-warstw'), full(), PATENT_PROFILE);
+  it('ignores a mistake that belongs to no area', () => {
+    const bands = buildPool(preferred('spoza-warstw'), full(), PATENT_PROFILE);
 
-    assert.ok(pools.every((layer) => layer.every((entry) => entry.id !== 'spoza-warstw')));
+    assert.ok(!flat(bands).includes('spoza-warstw'));
   });
 
   it('does not always top up with the same questions', () => {
     // One mistake used to give the same nine companions on every attempt, because the top-up
-    // walked the layer in bundle order. The screen promises questions drawn from the area.
+    // walked the pool in bundle order. The screen promises questions drawn from the area.
     const seen = new Set<string>();
     for (let seed = 1; seed <= 20; seed += 1) {
-      const pools = buildPool(preferred('l0q0'), full(), PATENT_PROFILE, seeded(seed));
-      seen.add(pools[2].map((entry) => entry.id).join(','));
+      const bands = buildPool(preferred('u0'), full(), PATENT_PROFILE, seeded(seed));
+      seen.add(bands[1][0].map((entry) => entry.id).join(','));
     }
 
     assert.ok(seen.size > 1, 'dopełnianie zawsze bierze te same pytania');
@@ -532,7 +632,7 @@ describe('the WPA profile', () => {
   it('draws a full paper with nothing marked critical', () => {
     // The pool is full of questions the licence exam would treat as critical — under this
     // profile that classification simply doesn't exist.
-    const exam = drawExam(layers(40), WPA_PROFILE, seeded(2));
+    const exam = drawExam(single(40), WPA_PROFILE, seeded(2));
 
     assert.equal(exam.length, 20);
     assert.ok(exam.every((entry) => !entry.critical));
@@ -541,21 +641,21 @@ describe('the WPA profile', () => {
   it('draws from a pool with no critical questions at all', () => {
     // The licence exam would throw here, and that's the trap: a profile without a critical
     // group must not inherit its requirement.
-    assert.doesNotThrow(() => drawExam(layers(25), WPA_PROFILE, seeded(4)));
+    assert.doesNotThrow(() => drawExam(single(25), WPA_PROFILE, seeded(4)));
   });
 
   it('still refuses a pool too small for the paper', () => {
-    assert.throws(() => drawExam(layers(19), WPA_PROFILE, seeded(1)), NotEnoughQuestionsError);
+    assert.throws(() => drawExam(single(19), WPA_PROFILE, seeded(1)), NotEnoughQuestionsError);
   });
 
   it('does not repeat a question within one paper', () => {
-    const ids = drawExam(layers(40), WPA_PROFILE, seeded(8)).map((e) => e.question.id);
+    const ids = drawExam(single(40), WPA_PROFILE, seeded(8)).map((e) => e.question.id);
 
     assert.equal(new Set(ids).size, 20);
   });
 
   it('passes at the threshold and fails one below it', () => {
-    const exam = drawExam(layers(40), WPA_PROFILE, seeded(6));
+    const exam = drawExam(single(40), WPA_PROFILE, seeded(6));
     const answers = (correct: number) =>
       new Map<string, Letter | null>(
         exam.map((entry, index) => [
@@ -576,7 +676,7 @@ describe('the WPA profile', () => {
   });
 
   it('a mistake on the first question is an ordinary mistake', () => {
-    const exam = drawExam(layers(40), WPA_PROFILE, seeded(9));
+    const exam = drawExam(single(40), WPA_PROFILE, seeded(9));
     const chosen = new Map<string, Letter | null>(
       exam.map((entry, index) => [entry.question.id, index === 0 ? 'B' : entry.question.correct]),
     );
@@ -589,12 +689,15 @@ describe('the WPA profile', () => {
   });
 
   it('tops a mistakes pool up to a full paper without demanding critical questions', () => {
-    const base = layers(40);
-    const result = buildPool([base[0][0], base[0][1]], base, WPA_PROFILE);
+    const base = single(40);
+    const result = buildPool([base[0][0][0], base[0][0][1]], base, WPA_PROFILE);
 
     assert.equal(result.length, 1);
-    assert.ok(result[0].length >= WPA_PROFILE.questionCount);
-    assert.deepEqual(result[0].slice(0, 2).map((q) => q.id), [base[0][0].id, base[0][1].id]);
+    assert.ok(result[0][0].length >= WPA_PROFILE.questionCount);
+    assert.deepEqual(
+      result[0][0].slice(0, 2).map((q) => q.id),
+      [base[0][0][0].id, base[0][0][1].id],
+    );
     assert.doesNotThrow(() => drawExam(result, WPA_PROFILE, seeded(12)));
   });
 });
