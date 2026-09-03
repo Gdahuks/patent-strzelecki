@@ -92,7 +92,13 @@ export function lessonCss(theme: Theme, base: number): string {
     .row { display: block; }
     .one-half.column, .one-third.column, .two-thirds.column, .column { width: 100%; }
     table { width: 100%; border-collapse: collapse; display: block; overflow-x: auto; }
-    td, th { border: 1px solid ${theme.border}; padding: 8px; }
+    /* Cells opt out of the breaking set on the body. Inherited, overflow-wrap: anywhere
+       counts towards a cell's min-content width, so a column can be squeezed down to a
+       single character — the course's finance table then reads vertically, digit under
+       digit. It also keeps the table from ever growing past the screen, which is why the
+       overflow-x above had nothing to scroll. Back on normal, a column is at least as wide
+       as its longest word and a table too wide for the screen scrolls sideways instead. */
+    td, th { border: 1px solid ${theme.border}; padding: 8px; overflow-wrap: normal; }
 
     /* Glossary abbreviations: marked, but without the look of a link — tapping shows
        the expansion right there, instead of opening a new screen. */
