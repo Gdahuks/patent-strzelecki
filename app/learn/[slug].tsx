@@ -274,6 +274,14 @@ export default function LessonScreen() {
           allowFileAccess
           allowFileAccessFromFileURLs
           allowUniversalAccessFromFileURLs
+          // Without this, iOS grants the WebView read access to the lesson file **alone**
+          // (RNCWebViewImpl.m: `readAccessUrl = allowingReadAccessToURL ?: request.URL`),
+          // so `assets/…` next to it is outside the sandbox and every image in the lesson
+          // comes out as a broken-image icon. Android reads it anyway through
+          // allowFileAccess, and neither the simulator nor macOS WebKit reproduces it —
+          // there the WebContent process isn't sandboxed, so the sibling directory opens.
+          // The only place the difference shows is a real device.
+          allowingReadAccessToURL={contentDirUri()}
           onShouldStartLoadWithRequest={onNavigate}
           onMessage={onMessage}
           // A phrase from search results must only take effect after the content has loaded.

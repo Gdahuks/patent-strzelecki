@@ -12,11 +12,12 @@
 STAGE=build
 source "$(dirname "$0")/lib.sh"
 
-# The three suites that skip themselves without the content bundle. Here the bundle is present,
-# so they must run — a skip here means the copy did not land where the tests look.
+# Suites that skip themselves without the content bundle. Here the bundle is present, so they
+# must run — a skip here means the copy did not land where the tests look.
 CONTENT_SUITES=(
   src/content/versions.package.test.ts
   src/content/acts.package.test.ts
+  src/content/assets.package.test.ts
   src/content/actSearch.test.ts
 )
 

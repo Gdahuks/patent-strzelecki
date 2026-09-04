@@ -10,6 +10,7 @@
 
 import { Directory, File, Paths } from 'expo-file-system';
 
+import { previewSource } from '../engine/assetPreview';
 import { isNoop, planMaterialize, stampFor } from '../engine/materializePlan';
 import { withDefinitions } from './glossaryScript';
 import { content } from './store';
@@ -142,9 +143,23 @@ export async function materializeContent(css: string, themeKey: string): Promise
   versionFile.write(stampFor(content.version, themeKey));
 }
 
-/** The full on-disk address of an image — for previewing diagrams opened from lesson content. */
-export function assetUri(name: string): string {
-  return new File(new Directory(root(), 'assets'), name).uri;
+/**
+ * The image ready to be shown by the preview screen, or null when there's nothing to show.
+ *
+ * The bytes travel inside the address instead of being fetched as a second resource. The
+ * preview page is an HTML string with no base address, so for WebKit a `file://` picture in
+ * it comes from a foreign origin and the origin policy drops it — on iOS the screen showed
+ * the description and an empty page. This way the WebView needs no file access at all, and
+ * the screen stopped asking for any.
+ *
+ * Null covers both "no such file" and "a name that promises no image type"; the screen says
+ * the same thing about each, because the bundle cannot hold the second kind — the scraper
+ * refuses to build one, and `assets.package.test.ts` guards the built bundle.
+ */
+export function assetPreview(name: string): string | null {
+  if (!assetExists(name)) return null;
+
+  return previewSource(name, new File(new Directory(root(), 'assets'), name).base64Sync());
 }
 
 /**

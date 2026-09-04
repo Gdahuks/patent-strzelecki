@@ -1,8 +1,9 @@
 import { Stack, useLocalSearchParams } from 'expo-router';
+import { useMemo } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import { WebView } from 'react-native-webview';
 
-import { assetExists, assetUri } from '../../src/content/materialize';
+import { assetPreview } from '../../src/content/materialize';
 import { useTheme } from '../../src/theme';
 
 /**
@@ -18,9 +19,15 @@ export default function ImageScreen() {
   const { name } = useLocalSearchParams<{ name: string }>();
   const theme = useTheme();
 
+  // Memoized on the name: reading the file and encoding it runs on the JS thread, and the
+  // biggest diagram in the bundle is 480 KB — half a megabyte of base64 built again on
+  // every render. `useTheme` is `useColorScheme`, which fires on appearance changes the
+  // user never asked for, including iOS's own during backgrounding.
+  const source = useMemo(() => assetPreview(name), [name]);
+
   // Sibling screens (lesson, act) state plainly what's missing from the bundle. Without
   // this, a missing image produced a blank page with the title "Schemat" and nothing else.
-  if (!assetExists(name)) {
+  if (source === null) {
     return (
       <View style={[styles.missing, { backgroundColor: theme.bg }]}>
         <Stack.Screen options={{ title: 'Nie znaleziono' }} />
@@ -28,8 +35,6 @@ export default function ImageScreen() {
       </View>
     );
   }
-
-  const src = assetUri(name).replace(/&/g, '&amp;').replace(/"/g, '&quot;');
 
   // `lang` and `alt` are here for the same reason as in lessons: without the language, a
   // screen reader pronounces Polish words with English phonetics, and without a description
@@ -45,7 +50,7 @@ export default function ImageScreen() {
   body { display: flex; align-items: center; justify-content: center; }
   img { max-width: 100%; height: auto; }
 </style>
-</head><body><img src="${src}" alt="Powiększony obrazek z lekcji"></body></html>`;
+</head><body><img src="${source}" alt="Powiększony obrazek z lekcji"></body></html>`;
 
   return (
     <View style={[styles.fill, { backgroundColor: theme.bg }]}>
@@ -53,9 +58,8 @@ export default function ImageScreen() {
       <WebView
         source={{ html }}
         originWhitelist={['*']}
-        allowFileAccess
-        allowFileAccessFromFileURLs
-        allowUniversalAccessFromFileURLs
+        // No file-access properties here on purpose: the picture rides inside the address,
+        // so this WebView has nothing to fetch and needs no permission to reach the disk.
         javaScriptEnabled={false}
         scalesPageToFit
         style={{ backgroundColor: theme.bg }}
