@@ -198,18 +198,17 @@ export default function LessonScreen() {
     }, [track]),
   );
 
-  const toggleRead = useCallback(() => {
-    const next: ReadingState = readState === 'read' ? 'started' : 'read';
+  const markRead = useCallback(() => {
+    const next: ReadingState = 'read';
     setReadState(next);
     void setReadingState(slug, next);
     // Marking it read by hand puts the peak at the end, so the tracker has nothing left to
-    // raise and won't write over the state that was just chosen.
-    // The tracker only ever writes a peak that beats the stored one, so its in-memory copy has
-    // to follow the state chosen by hand — otherwise unmarking a lesson would leave the peak at
-    // the end and the tracker could never mark it read again.
-    dwell.current = newDwell(next === 'read' ? 1 : 0);
-    savedPeak.current = next === 'read' ? 1 : 0;
-  }, [readState, slug]);
+    // raise and won't write over the state that was just chosen. Unmarking is not reachable
+    // from here — the row disappears once the lesson is read — and the list's long-press menu
+    // resets the peak on its own, so the tracker can mark such a lesson again.
+    dwell.current = newDwell(1);
+    savedPeak.current = 1;
+  }, [slug]);
 
   /**
    * Guards against navigation that wasn't triggered by a click — a script-driven redirect,
@@ -362,34 +361,31 @@ export default function LessonScreen() {
           </>
         ) : null}
 
-        <Pressable
-          onPress={toggleRead}
-          accessibilityRole="button"
-          // "✓ Przeczytane" isn't a label, it's the current state — a screen reader needs to
-          // know that tapping it toggles the state, not that the button is named "read".
-          accessibilityLabel={
-            readState === 'read' ? 'Przeczytane. Oznacz jako nieprzeczytane' : 'Oznacz jako przeczytane'
-          }
-          accessibilityState={{ checked: readState === 'read' }}
-          style={({ pressed }) => [
-            styles.readToggle,
-            {
-              borderTopColor: theme.border,
-              borderTopWidth: sets.length > 0 ? StyleSheet.hairlineWidth : 0,
-            },
-            pressed && styles.pressed,
-          ]}
-        >
-          <Text
-            style={{
-              color: readState === 'read' ? theme.good : theme.accent,
-              fontSize: 15,
-              fontWeight: '600',
-            }}
+        {/* Once the lesson is read the row goes away: it is a state, not an action anyone
+            taps again, and scrolling to the end sets that state on its own. Unmarking keeps
+            its own path — long-pressing the lesson in the list offers both „Oznacz jako
+            nieprzeczytane" and „Wyczyść stan". The footer itself stays rendered even when
+            empty, because its bottom inset is what keeps the content clear of the system
+            navigation bar. */}
+        {readState === 'read' ? null : (
+          <Pressable
+            onPress={markRead}
+            accessibilityRole="button"
+            accessibilityLabel="Oznacz jako przeczytane"
+            style={({ pressed }) => [
+              styles.readToggle,
+              {
+                borderTopColor: theme.border,
+                borderTopWidth: sets.length > 0 ? StyleSheet.hairlineWidth : 0,
+              },
+              pressed && styles.pressed,
+            ]}
           >
-            {readState === 'read' ? '✓ Przeczytane' : 'Oznacz jako przeczytane'}
-          </Text>
-        </Pressable>
+            <Text style={{ color: theme.accent, fontSize: 15, fontWeight: '600' }}>
+              Oznacz jako przeczytane
+            </Text>
+          </Pressable>
+        )}
       </View>
     </View>
   );
@@ -398,7 +394,9 @@ export default function LessonScreen() {
 const styles = StyleSheet.create({
   fill: { flex: 1 },
   missing: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 24 },
-  readToggle: { alignItems: 'center', paddingVertical: 13 },
+  // 12, not less: at 10 the row measured 40.8 dp on a 420 dpi phone, under the 44 dp
+  // this project holds everywhere except the exceptions written down next to their code.
+  readToggle: { alignItems: 'center', paddingVertical: 12 },
   // An emoji sits on the baseline and leaves room underneath it, so inside a round header
   // button it landed above centre. A fixed-size container plus a lineHeight equal to its
   // height centres the glyph on both axes.
@@ -422,7 +420,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     gap: 8,
-    paddingVertical: 13,
+    // See readToggle: 12 is the floor that keeps the row at 44 dp.
+    paddingVertical: 12,
   },
   toggleLabel: { fontSize: 15, fontWeight: '600' },
   pressed: { opacity: 0.65 },
