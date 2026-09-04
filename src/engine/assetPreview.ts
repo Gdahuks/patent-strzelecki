@@ -33,7 +33,7 @@ const MIME: Record<string, string> = {
  */
 export function previewSource(name: string, base64: string): string | null {
   const extension = name.slice(name.lastIndexOf('.') + 1).toLowerCase();
-  const mime = MIME[extension];
-
-  return mime ? `data:${mime};base64,${base64}` : null;
+  // `Object.hasOwn`, because a plain object answers for `constructor` and `toString` too —
+  // a name ending in one of those would yield an address built from a function body.
+  return Object.hasOwn(MIME, extension) ? `data:${MIME[extension]};base64,${base64}` : null;
 }

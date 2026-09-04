@@ -1,4 +1,5 @@
 import { Stack, useLocalSearchParams } from 'expo-router';
+import { useMemo } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import { WebView } from 'react-native-webview';
 
@@ -18,7 +19,11 @@ export default function ImageScreen() {
   const { name } = useLocalSearchParams<{ name: string }>();
   const theme = useTheme();
 
-  const source = assetPreview(name);
+  // Memoized on the name: reading the file and encoding it runs on the JS thread, and the
+  // biggest diagram in the bundle is 480 KB — half a megabyte of base64 built again on
+  // every render. `useTheme` is `useColorScheme`, which fires on appearance changes the
+  // user never asked for, including iOS's own during backgrounding.
+  const source = useMemo(() => assetPreview(name), [name]);
 
   // Sibling screens (lesson, act) state plainly what's missing from the bundle. Without
   // this, a missing image produced a blank page with the title "Schemat" and nothing else.
@@ -30,8 +35,6 @@ export default function ImageScreen() {
       </View>
     );
   }
-
-  const src = source.replace(/&/g, '&amp;').replace(/"/g, '&quot;');
 
   // `lang` and `alt` are here for the same reason as in lessons: without the language, a
   // screen reader pronounces Polish words with English phonetics, and without a description
@@ -47,7 +50,7 @@ export default function ImageScreen() {
   body { display: flex; align-items: center; justify-content: center; }
   img { max-width: 100%; height: auto; }
 </style>
-</head><body><img src="${src}" alt="Powiększony obrazek z lekcji"></body></html>`;
+</head><body><img src="${source}" alt="Powiększony obrazek z lekcji"></body></html>`;
 
   return (
     <View style={[styles.fill, { backgroundColor: theme.bg }]}>

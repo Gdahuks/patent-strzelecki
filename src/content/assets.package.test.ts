@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
-import { existsSync, readFileSync, readdirSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -124,13 +124,31 @@ describe.skipIf(!PRESENT)('the real image bundle', () => {
     }
   });
 
+  it('the manifest and the module carry the same images, and no others', () => {
+    // The check has to be on the module, not on the directory: `writeAssets` unpacks the
+    // images from `assets-base64.js`, so that module — not `assets/` on disk — is what ends
+    // up inside the APK and on the device. A rename done by halves that corrected the file
+    // and the manifest but left the old key in the module would ship the stale picture in
+    // every release, which is the very thing this test exists to catch.
+    //
+    // Both directions matter: a key with no manifest entry is the orphan, an entry with no
+    // key is an image the app cannot unpack.
+    const inModule = Object.keys(payloads()).sort();
+    const inManifest = bundle()
+      .assets.map(({ path }) => path.slice('assets/'.length))
+      .sort();
+
+    assert.deepEqual(inModule, inManifest);
+  });
+
   it('no image is carried that nothing points at', () => {
     // An orphan is the trace of a rename done by halves: the picture under the new name is
     // shown, the one under the old name travels along in every release forever.
     const pointedAt = new Set(references().map(({ reference }) => reference.slice('assets/'.length)));
 
-    for (const name of readdirSync(join(DIRECTORY, 'assets'))) {
-      assert.ok(pointedAt.has(name), `assets/${name}: in the bundle, no lesson points at it`);
+    for (const { path } of bundle().assets) {
+      const name = path.slice('assets/'.length);
+      assert.ok(pointedAt.has(name), `${path}: in the bundle, no lesson points at it`);
     }
   });
 });

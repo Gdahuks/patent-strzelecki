@@ -2,7 +2,7 @@
  * Reads the JSON report vitest writes with `--reporter=json --outputFile=…` and refuses anything
  * short of "every test ran and passed".
  *
- * Why this exists: three test files in `src/content/` skip themselves when the content bundle is
+ * Why this exists: some test files in `src/content/` skip themselves when the content bundle is
  * absent (`describe.skipIf(!PRESENT)`), which is the right thing in CI and on a fresh clone. The
  * release build is the one place where the bundle *is* present — so there, a skipped test means
  * the copy did not land where the tests look, and a report with skips must fail the release.

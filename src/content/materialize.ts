@@ -143,11 +143,6 @@ export async function materializeContent(css: string, themeKey: string): Promise
   versionFile.write(stampFor(content.version, themeKey));
 }
 
-/** The full on-disk address of an image — for previewing diagrams opened from lesson content. */
-export function assetUri(name: string): string {
-  return new File(new Directory(root(), 'assets'), name).uri;
-}
-
 /**
  * The image ready to be shown by the preview screen, or null when there's nothing to show.
  *
