@@ -260,9 +260,12 @@ describe('date on a hit in a provision not yet in force', () => {
  * The same thing against the real bundle — the only place in this file that looks at it.
  *
  * The fixture builds the markup layout from memory, while this test takes it from a file
- * that actually ships in the app: art. 255b of the Kodeks karny is a provision added by an
- * amendment and coming into force separately, with the neighbouring art. 255a already in
- * force. The test **skips itself** without the bundle — the whole `assets/content/`
+ * that actually ships in the app: art. 89a of the Kodeks wykroczeń is a provision added by an
+ * amendment and coming into force separately, with the neighbouring art. 89 already in
+ * force. Until October 2026 this was art. 255b of the Kodeks karny, until the Chancellery's
+ * consolidated text absorbed it — that is what will eventually happen to 89a too, and the
+ * assertion message then says to pick another such provision. The test **skips itself**
+ * without the bundle — the whole `assets/content/`
  * directory is outside this repository, because it also carries the course's lesson and
  * question content, not because this particular act (public law text from the Sejm API,
  * not subject to copyright) is anyone's property, same as in `versions.package.test.ts`.
@@ -271,9 +274,9 @@ const BUNDLE = join(dirname(fileURLToPath(import.meta.url)), '../../assets/conte
 const PRESENT = existsSync(BUNDLE);
 
 describe.skipIf(!PRESENT)('a provision in reserve, in the real bundle', () => {
-  const PENAL_CODE = PRESENT
+  const PETTY_OFFENCES_CODE = PRESENT
     ? (JSON.parse(readFileSync(BUNDLE, 'utf8')) as Act[]).filter(
-        (act) => act.slug === 'kodeks-karny',
+        (act) => act.slug === 'kodeks-wykroczen',
       )
     : [];
 
@@ -294,36 +297,40 @@ describe.skipIf(!PRESENT)('a provision in reserve, in the real bundle', () => {
     return /class="wersja wersja-od" data-od="(\d{4}-\d{2}-\d{2})"/.exec(fragment)?.[1] ?? null;
   }
 
-  it('a hit in art. 255b of the Kodeks karny carries the effective date', () => {
-    const [kk] = PENAL_CODE;
-    assert.ok(kk, 'the bundle has no Kodeks karny');
+  it('a hit in art. 89a of the Kodeks wykroczeń carries the effective date', () => {
+    const [kw] = PETTY_OFFENCES_CODE;
+    assert.ok(kw, 'the bundle has no Kodeks wykroczeń');
 
-    // We take the date from the bundle instead of hardcoding it in the test: 23 August
-    // 2026 will pass eventually, and then this same provision becomes law in force and the
-    // card should stay silent about the date. The test should then still be checking the
-    // same thing, not failing because of the calendar.
-    const od = unitDate(kk, 'arti_255b');
-    assert.ok(od, 'art. 255b is no longer a provision in the bundle with its own effective date');
+    // We take the date from the bundle instead of hardcoding it in the test: once it passes,
+    // this same provision is law in force and the card should stay silent about the date.
+    // The test should then still be checking the same thing, not failing because of the
+    // calendar.
+    const od = unitDate(kw, 'arti_89a');
+    assert.ok(
+      od,
+      'art. 89a no longer has its own effective date in the bundle — the consolidated text ' +
+        'absorbed it; point this test at another provision carrying "wersja-od"',
+    );
 
-    // "zwierzęcia" appears exactly once in the whole code, in point 2 of this article.
-    const [hit] = searchActs([kk], 'zwierzęcia');
-    assert.ok(hit, 'no hit in art. 255b');
-    assert.match(hit.excerpt, /przemoc wobec zwierzęcia/);
+    // "kasku ochronnego" appears only in this article, in all three of its paragraphs.
+    const [hit] = searchActs([kw], 'kasku ochronnego');
+    assert.ok(hit, 'no hit in art. 89a');
+    assert.match(hit.excerpt, /nie używa kasku ochronnego/);
     assert.equal(hit.future, od > today() ? od : null);
   });
 
-  it('a hit in art. 255a — a provision in force — carries no date', () => {
-    const [kk] = PENAL_CODE;
-    assert.ok(kk, 'the bundle has no Kodeks karny');
+  it('a hit in art. 89 — a provision in force — carries no date', () => {
+    const [kw] = PETTY_OFFENCES_CODE;
+    assert.ok(kw, 'the bundle has no Kodeks wykroczeń');
 
-    // "szkoleniu mogącym" first appears in § 2 of this article, i.e. right before 255b: if
-    // the not-yet-in-force provision's range started even a sentence too early, a date
-    // would show up here. The article itself carries no rendering marker at all.
-    assert.equal(unitDate(kk, 'arti_255a'), null);
+    // "torach pojazdu szynowego" appears once in the whole code, in this article, i.e. right
+    // before 89a: if the not-yet-in-force provision's range started even a sentence too
+    // early, a date would show up here. The article itself carries no rendering marker.
+    assert.equal(unitDate(kw, 'arti_89'), null);
 
-    const [hit] = searchActs([kk], 'szkoleniu mogącym');
-    assert.ok(hit, 'no hit in art. 255a');
-    assert.match(hit.excerpt, /uczestniczy w szkoleniu mogącym/);
+    const [hit] = searchActs([kw], 'torach pojazdu szynowego');
+    assert.ok(hit, 'no hit in art. 89');
+    assert.match(hit.excerpt, /na torach pojazdu szynowego/);
     assert.equal(hit.future, null);
   });
 });
