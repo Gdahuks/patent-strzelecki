@@ -78,10 +78,11 @@ code**. These are conditions, not preferences.
 reshuffles A/B/C on every page load, and for part of the questions (110 of 656 in October 2026)
 keeps a pool of wrong answers and draws two per showing. The bundle carries every question as
 `options: [{id, text}]` plus `correctId`; `engine/answerDraw.ts` turns that into the three-letter
-`Question` the screens use — `content.question()` is a stable default view, while the practice
-screen and the exam call `drawAnswers` on every showing. Exam attempts store `chosenId` and
-`chosenText`; the result card reads the current text by id (so a fixed typo shows up) and falls
-back to the stored text. Attempts from before ids were stored are migrated once on start, before
+`Question` the screens use — `content.question()` is a stable default view, while every exam
+paper and every practice session draws its own pair with `drawAnswers` (once per session in
+practice: picks and the preview are keyed by question). Exam attempts store `chosenId` and
+`chosenText`; the result card reads the current text by id (so a fixed typo shows up), falls
+back to the stored text, and never shows a miss equal to the correct answer. Attempts from before ids were stored are migrated once on start, before
 `materializeContent` overwrites the stamp that says which bundle the device came from, using
 `assets/content/legacy-answers.json` — built by `make legacy-answers` (a prerequisite of every
 build target) from the content copies in the releases directory, and rebuilt by the release

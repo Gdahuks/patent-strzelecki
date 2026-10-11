@@ -98,10 +98,13 @@ export default function ExerciseScreen() {
    */
   const [orders, setOrders] = useState<Map<string, Letter[]>>(new Map());
   /**
-   * The answers each question was asked with. Part of the questions have a pool of wrong
-   * answers and every showing draws its own pair (`drawAnswers`), so the preview has to
-   * replay the draw — with the letters and the pick that belonged to it.
+   * The answers each question is asked with in this session. Part of the questions have a pool
+   * of wrong answers (`drawAnswers`); a question is drawn once per session, not per showing,
+   * because picks and the preview are keyed by question — a redraw when the same question
+   * came back would replay an old pick against a new pair of answers. The ref is the source
+   * for `advance`, which is memoised without dependencies; the state drives rendering.
    */
+  const viewsRef = useRef<Map<string, Question>>(new Map());
   const [views, setViews] = useState<Map<string, Question>>(new Map());
   const [revealed, setRevealed] = useState(false);
 
@@ -145,12 +148,16 @@ export default function ExerciseScreen() {
     setNeedsManualNext(false);
 
     if (card) {
-      const base = content.question(card.questionId);
-      const question = base ? drawAnswers(base) : undefined;
+      const known = viewsRef.current.get(card.questionId);
+      const base = known ? undefined : content.question(card.questionId);
+      const question = known ?? (base ? drawAnswers(base) : undefined);
+      if (question && !known) {
+        viewsRef.current = new Map(viewsRef.current).set(card.questionId, question);
+        setViews(viewsRef.current);
+      }
       const drawn = shuffle(Object.keys(question?.answers ?? {}) as Letter[]);
       setOrder(drawn);
       setOrders((previous) => new Map(previous).set(card.questionId, drawn));
-      if (question) setViews((previous) => new Map(previous).set(card.questionId, question));
       setHistory((previous) => [...previous, card.questionId].slice(-HISTORY_LIMIT));
     }
   }, []);
@@ -172,7 +179,8 @@ export default function ExerciseScreen() {
       setHistory([]);
       setPicks(new Map());
       setOrders(new Map());
-      setViews(new Map());
+      viewsRef.current = new Map();
+      setViews(viewsRef.current);
       advance(state);
     })();
 

@@ -33,8 +33,10 @@ export function AttemptAnswerCard({ answer }: { answer: AttemptAnswer }) {
   }
 
   const lesson = question.lesson ? content.lesson(question.lesson) : undefined;
-  const chosenText = chosenTextOf(answer, (questionId, answerId) =>
-    content.optionText(questionId, answerId),
+  const chosenText = chosenTextOf(
+    answer,
+    (questionId, answerId) => content.optionText(questionId, answerId),
+    question.answers[question.correct],
   );
 
   return (

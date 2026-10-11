@@ -117,11 +117,24 @@ export function migrateAnswers(
   return { answers: migrated, changed };
 }
 
-/** The „Twoja odpowiedź" text — `null` when there is none to show. */
-export function chosenTextOf(answer: StoredAnswer, currentText: CurrentText): string | null {
+/**
+ * The „Twoja odpowiedź" text — `null` when there is none to show.
+ *
+ * `correctText` is the last guard: a miss can never show the correct answer as the user's own,
+ * whatever path got it there — a course that has since made that answer the correct one, or a
+ * migration matching an old text to today's correct answer. That sight is the bug this module
+ * exists for, so it is ruled out here rather than trusted not to happen.
+ */
+export function chosenTextOf(
+  answer: StoredAnswer,
+  currentText: CurrentText,
+  correctText?: string,
+): string | null {
+  let text = answer.chosenText ?? null;
   if (answer.chosenId) {
     const current = currentText(answer.questionId, answer.chosenId);
-    if (current !== undefined) return current;
+    if (current !== undefined) text = current;
   }
-  return answer.chosenText ?? null;
+  if (!answer.wasCorrect && text !== null && text === correctText) return null;
+  return text;
 }

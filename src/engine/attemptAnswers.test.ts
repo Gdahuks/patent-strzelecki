@@ -172,6 +172,19 @@ describe('migrating answers stored as letters only', () => {
 });
 
 describe('what the attempt card shows as „Twoja odpowiedź"', () => {
+  it('never the correct answer on a miss, whichever way the text got there', () => {
+    const answer: StoredAnswer = { ...legacyMiss('B'), chosenId: 'q1_2', chosenText: '6500 g' };
+
+    assert.equal(chosenTextOf(answer, currentText, '6500 g'), null);
+    assert.equal(chosenTextOf(answer, currentText, '8000 g'), '6500 g');
+  });
+
+  it('a hit keeps its text even though it equals the correct one', () => {
+    const hit: StoredAnswer = { ...legacyMiss('A'), wasCorrect: true, chosenText: '8000 g' };
+
+    assert.equal(chosenTextOf(hit, currentText, '8000 g'), '8000 g');
+  });
+
   it('nothing for an answer that was never migrated — a letter alone proves nothing', () => {
     assert.equal(chosenTextOf(legacyMiss('B'), currentText), null);
   });

@@ -84,10 +84,10 @@ bundle: legacy-answers ## Check that the app bundles (without installing it)
 
 # ── Development ──────────────────────────────────────────────────────────────
 
-start: ## Metro dev server (for a debug build)
+start: legacy-answers ## Metro dev server (for a debug build)
 	npx expo start
 
-start-clean: ## Dev server with the Metro cache cleared
+start-clean: legacy-answers ## Dev server with the Metro cache cleared
 	npx expo start --clear
 
 # ── Version ──────────────────────────────────────────────────────────────────

@@ -85,6 +85,9 @@ function AppShell() {
     // The history migration first: it reads which bundle the device came from off the stamp
     // that materialization is about to overwrite.
     migrateAttemptAnswers()
+      // The history is not a condition for the app to work: a failed migration only means
+      // „Twoja odpowiedź" lines stay hidden for old attempts, never that the app won't start.
+      .catch((cause: unknown) => console.warn('exam history migration failed', cause))
       .then(() =>
         materializeContent(
           lessonCss(theme, contentSize),
