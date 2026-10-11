@@ -17,6 +17,8 @@ export type LegacyRow = [string, string, string, Letter];
 export interface LegacyAnswers {
   versions: Record<string, string>;
   tables: Record<string, Record<string, LegacyRow>>;
+  /** When each version was scraped — an attempt finished earlier was not taken on it. */
+  scrapedAt: Record<string, string>;
 }
 
 interface ShippedQuestion {
@@ -27,6 +29,7 @@ interface ShippedQuestion {
 
 export interface ShippedBundle {
   version: string;
+  scrapedAt?: string;
   questions: ShippedQuestion[];
 }
 
@@ -36,7 +39,7 @@ export function storesLetters(bundle: ShippedBundle): boolean {
 }
 
 export function buildLegacyAnswers(bundles: readonly ShippedBundle[]): LegacyAnswers {
-  const result: LegacyAnswers = { versions: {}, tables: {} };
+  const result: LegacyAnswers = { versions: {}, tables: {}, scrapedAt: {} };
   const keyOf = new Map<string, string>();
 
   for (const bundle of bundles) {
@@ -56,6 +59,7 @@ export function buildLegacyAnswers(bundles: readonly ShippedBundle[]): LegacyAns
       result.tables[key] = rows;
     }
     result.versions[bundle.version] = key;
+    if (bundle.scrapedAt) result.scrapedAt[bundle.version] = bundle.scrapedAt;
   }
   return result;
 }

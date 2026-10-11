@@ -5,6 +5,7 @@ import { buildLegacyAnswers, storesLetters, type ShippedBundle } from './legacyA
 
 const LETTERS: ShippedBundle = {
   version: 'v1',
+  scrapedAt: '2026-08-13T12:44:04+00:00',
   questions: [
     { id: 'q2', answers: { A: 'a2', B: 'b2', C: 'c2' }, correct: 'C' },
     { id: 'q1', answers: { A: 'a1', B: 'b1', C: 'c1' }, correct: 'A' },
@@ -18,6 +19,7 @@ describe('the legacy answers table', () => {
     const key = table.versions.v1;
     assert.deepEqual(table.tables[key].q1, ['a1', 'b1', 'c1', 'A']);
     assert.deepEqual(table.tables[key].q2, ['a2', 'b2', 'c2', 'C']);
+    assert.equal(table.scrapedAt.v1, '2026-08-13T12:44:04+00:00');
   });
 
   it('stores one table for versions that share their answers', () => {
@@ -42,6 +44,6 @@ describe('the legacy answers table', () => {
     const pooled = { version: 'v9', questions: [{ id: 'q1' }] } as ShippedBundle;
 
     assert.equal(storesLetters(pooled), false);
-    assert.deepEqual(buildLegacyAnswers([pooled]), { versions: {}, tables: {} });
+    assert.deepEqual(buildLegacyAnswers([pooled]), { versions: {}, tables: {}, scrapedAt: {} });
   });
 });

@@ -9,6 +9,7 @@ import {
   type StoredAnswer,
   chosenTextOf,
   migrateAnswers,
+  notBeforeOf,
   tableFor,
 } from './attemptAnswers';
 
@@ -118,9 +119,19 @@ describe('migrating answers stored as letters only', () => {
     const lookup = tableFor('older', LEGACY);
     assert.equal(lookup, null);
 
-    const { answers } = migrateAnswers([legacyMiss('B')], lookup, findId);
-    assert.equal(answers[0].chosenText, null);
+    const { answers, changed } = migrateAnswers([legacyMiss('B')], lookup, findId);
+    // Nothing written: a later build with the table can still migrate it.
+    assert.equal(changed, false);
+    assert.equal(answers[0].chosenText, undefined);
     assert.equal(chosenTextOf(answers[0], currentText), null);
+  });
+
+  it('an attempt finished before the bundle was scraped was not taken on it', () => {
+    const dated: LegacyAnswers = { ...LEGACY, scrapedAt: { old1: '2026-08-13T12:44:04+00:00' } };
+
+    assert.equal(notBeforeOf('old1', dated), Date.parse('2026-08-13T12:44:04+00:00'));
+    assert.equal(notBeforeOf('old2', dated), null);
+    assert.equal(notBeforeOf(null, dated), null);
   });
 
   it('no stamp on disk means nothing to read the letters against', () => {

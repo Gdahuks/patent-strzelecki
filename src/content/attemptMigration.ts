@@ -8,7 +8,13 @@
  */
 
 import { rewriteAttemptAnswers } from '../db/database';
-import { type LegacyAnswers, migrateAnswers, tableFor } from '../engine/attemptAnswers';
+import {
+  type LegacyAnswers,
+  type Lookup,
+  migrateAnswers,
+  notBeforeOf,
+  tableFor,
+} from '../engine/attemptAnswers';
 import { materializedVersion } from './materialize';
 import { content } from './store';
 
@@ -26,12 +32,23 @@ let running: Promise<number> | null = null;
 /** Rewrites the history once per app start; later calls share the first one's result. */
 export function migrateAttemptAnswers(): Promise<number> {
   running ??= (async () => {
-    const lookup = tableFor(materializedVersion(), legacyAnswers());
-    return rewriteAttemptAnswers((answers) =>
-      migrateAnswers(answers, lookup, (questionId, text) =>
-        content.optionIdByText(questionId, text),
-      ),
-    );
+    const version = materializedVersion();
+    // Loaded on the first attempt that needs it: once the history is migrated, a start reads
+    // the attempts and never touches the 150 KB table.
+    let loaded: { lookup: Lookup | null; notBefore: number | null } | null = null;
+    const findId = (questionId: string, text: string) => content.optionIdByText(questionId, text);
+
+    return rewriteAttemptAnswers((answers, finishedAt) => {
+      if (answers.every((answer) => answer.chosenText !== undefined)) {
+        return { answers, changed: false };
+      }
+      if (loaded === null) {
+        const legacy = legacyAnswers();
+        loaded = { lookup: tableFor(version, legacy), notBefore: notBeforeOf(version, legacy) };
+      }
+      const takenEarlier = loaded.notBefore !== null && finishedAt < loaded.notBefore;
+      return migrateAnswers(answers, takenEarlier ? null : loaded.lookup, findId);
+    });
   })().catch((cause: unknown) => {
     // A failed run must be retried on the next attempt, not replayed from memory.
     running = null;

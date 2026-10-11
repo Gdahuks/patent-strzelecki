@@ -50,6 +50,8 @@ export type LegacyRow = [string, string, string, Letter];
 export interface LegacyAnswers {
   versions: Record<string, string>;
   tables: Record<string, Record<string, LegacyRow>>;
+  /** When each version's content was scraped — an attempt finished earlier was not taken on it. */
+  scrapedAt?: Record<string, string>;
 }
 
 type Entry = Pick<Question, 'answers' | 'correct'>;
@@ -80,6 +82,18 @@ export function tableFor(version: string | null, legacy: LegacyAnswers): Lookup 
   };
 }
 
+/**
+ * The moment before which an attempt cannot have been taken on bundle `version`: its content
+ * did not exist yet. The verdict check in `textFor` only catches attempts whose verdict the
+ * table contradicts; one from an older bundle with a matching verdict would otherwise get
+ * another wrong answer's text, about two times in three.
+ */
+export function notBeforeOf(version: string | null, legacy: LegacyAnswers): number | null {
+  const stamp = version === null ? undefined : legacy.scrapedAt?.[version];
+  const time = stamp === undefined ? NaN : Date.parse(stamp);
+  return Number.isNaN(time) ? null : time;
+}
+
 function textFor(answer: StoredAnswer, lookup: Lookup | null): string | null {
   if (!answer.chosen || !lookup) return null;
 
@@ -97,12 +111,17 @@ function textFor(answer: StoredAnswer, lookup: Lookup | null): string | null {
 /**
  * Gives every letter-only answer its text and id. Answers already carrying a text (or an
  * explicit `null`) are left alone, so running this on every start changes nothing.
+ *
+ * Without a table nothing is written at all: the card hides an answer it can't read either
+ * way, and an unwritten answer can still be migrated by a build that does have the table —
+ * a written `null` could not.
  */
 export function migrateAnswers(
   answers: readonly StoredAnswer[],
   lookup: Lookup | null,
   findId: FindId,
 ): { answers: StoredAnswer[]; changed: boolean } {
+  if (lookup === null) return { answers: [...answers], changed: false };
   let changed = false;
   const migrated = answers.map((answer) => {
     if (answer.chosenText !== undefined) return answer;

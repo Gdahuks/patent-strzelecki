@@ -517,11 +517,14 @@ export type AttemptAnswer = StoredAnswer;
  * @returns how many attempts were rewritten
  */
 export async function rewriteAttemptAnswers(
-  transform: (answers: AttemptAnswer[]) => { answers: AttemptAnswer[]; changed: boolean },
+  transform: (
+    answers: AttemptAnswer[],
+    finishedAt: number,
+  ) => { answers: AttemptAnswer[]; changed: boolean },
 ): Promise<number> {
   const database = await db();
-  const rows = await database.getAllAsync<{ id: number; answers: string }>(
-    'SELECT id, answers FROM exam_attempts',
+  const rows = await database.getAllAsync<{ id: number; answers: string; finished_at: number }>(
+    'SELECT id, answers, finished_at FROM exam_attempts',
   );
 
   const updates: { id: number; answers: string }[] = [];
@@ -533,7 +536,7 @@ export async function rewriteAttemptAnswers(
       continue;
     }
     if (!Array.isArray(parsed) || !parsed.every(isAnswer)) continue;
-    const result = transform(parsed);
+    const result = transform(parsed, row.finished_at);
     if (result.changed) updates.push({ id: row.id, answers: JSON.stringify(result.answers) });
   }
 
