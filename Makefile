@@ -45,7 +45,7 @@ CONTENT_DIR  ?= $(or $(PATENT_CONTENT_DIR),$(CURDIR)/assets/content)
 .DEFAULT_GOAL := help
 .PHONY: help setup \
         typecheck lint check start start-clean bundle ios ios-sim prebuild \
-        android android-aab aab-content drop-stale-bundle \
+        android android-aab aab-content drop-stale-bundle legacy-answers \
         android-key android-avd android-emu prebuild-android version \
         icons icons-write doctor clean clean-native \
         release release-tag release-preflight release-content release-build \
@@ -77,17 +77,17 @@ typecheck: ## TypeScript, no emit
 lint: ## ESLint — bug-catching rules plus line length
 	npx eslint .
 
-bundle: ## Check that the app bundles (without installing it)
+bundle: legacy-answers ## Check that the app bundles (without installing it)
 	npx expo export --platform ios --output-dir /tmp/patent-bundle-check
 	@rm -rf /tmp/patent-bundle-check
 	@echo "Bundles fine."
 
 # ── Development ──────────────────────────────────────────────────────────────
 
-start: ## Metro dev server (for a debug build)
+start: legacy-answers ## Metro dev server (for a debug build)
 	npx expo start
 
-start-clean: ## Dev server with the Metro cache cleared
+start-clean: legacy-answers ## Dev server with the Metro cache cleared
 	npx expo start --clear
 
 # ── Version ──────────────────────────────────────────────────────────────────
@@ -123,14 +123,14 @@ XCODE_SHIM := $(CURDIR)/scripts/xcode-shim
 #
 # The shim on PATH is what keeps that last sentence true. It hands xcodebuild the flag that
 # lets it renew the seven-day signing profile on its own; the reasoning is in the script.
-ios: prebuild ## Release build and install on the iPhone (works afterwards without a laptop)
+ios: prebuild legacy-answers ## Release build and install on the iPhone (works afterwards without a laptop)
 	@test -n '$(DEVICE)' || { \
 	  printf 'Not sure what to install onto. Set PATENT_DEVICE in your shell profile\n'; \
 	  printf 'or pass it for one run: make ios DEVICE="device name"\n'; \
 	  printf 'Names of connected devices: make doctor\n'; exit 1; }
 	PATH="$(XCODE_SHIM):$$PATH" npx expo run:ios --device "$(DEVICE)" --configuration Release --no-bundler
 
-ios-sim: prebuild ## Release build on the simulator — a quick check before installing on the phone
+ios-sim: prebuild legacy-answers ## Release build on the simulator — a quick check before installing on the phone
 	npx expo run:ios --device "iPhone 17 Pro" --configuration Release --no-bundler
 
 prebuild: ## Copy config and icons into the native ios/ project
@@ -146,7 +146,7 @@ prebuild: ## Copy config and icons into the native ios/ project
 # The emulator has to already be running — start it with make android-emu or from the
 # Device Manager in Android Studio. `expo run:android` picks whichever device is connected
 # on its own, so this one target installs onto both an emulator and a physical phone.
-android: prebuild-android drop-stale-bundle ## Release build onto the emulator or a connected Android phone
+android: prebuild-android drop-stale-bundle legacy-answers ## Release build onto the emulator or a connected Android phone
 	npx expo run:android --variant release --no-bundler
 
 # Gradle keeps the JS bundle it compiled last time under android/app/build, and decides
@@ -160,6 +160,13 @@ android: prebuild-android drop-stale-bundle ## Release build onto the emulator o
 # artefact — so nothing along the way can see it. Hence the deletion here rather than a
 # reminder somewhere: the cost is one JS bundle recompiled from scratch, and the alternative
 # is a store release with stale course content.
+# Answers of the bundles shipped while exam attempts stored letters only, read from the content
+# copies in the releases directory. The first start after an update migrates the history with
+# it (src/engine/attemptAnswers.ts). The content tool replaces assets/content/ whole, so this is
+# regenerated before every build rather than once; without releases it writes an empty table.
+legacy-answers: ## Table of answers from shipped bundles, for migrating exam history
+	@node scripts/release/legacy-answers.ts '$(RELEASES_DIR)' '$(CONTENT_DIR)/legacy-answers.json'
+
 drop-stale-bundle:
 	@rm -rf android/app/build/generated/assets/createBundleReleaseJsAndAssets \
 	        android/app/build/intermediates/assets/release
@@ -172,7 +179,7 @@ drop-stale-bundle:
 # falls back to the debug signature (see the plugin in app.config.js) and you'd end up with
 # a file Play won't accept, finding out only from Play itself. Better to stop right here and
 # say what's missing.
-android-aab: prebuild-android drop-stale-bundle ## AAB package for Google Play (signed with the upload key)
+android-aab: prebuild-android drop-stale-bundle legacy-answers ## AAB package for Google Play (signed with the upload key)
 	@test -n '$(UPLOAD_KEYSTORE)' -a -n '$(UPLOAD_KEYCHAIN_ITEM)' || { \
 	  printf 'Not sure where the upload key lives.\n'; \
 	  printf 'Set in your shell profile: PATENT_UPLOAD_KEYSTORE and PATENT_UPLOAD_KEYCHAIN_ITEM\n'; \

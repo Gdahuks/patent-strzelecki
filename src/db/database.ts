@@ -24,6 +24,7 @@ import {
   latestMisses,
   latestVerdicts,
 } from '../engine/exam';
+import type { StoredAnswer } from '../engine/attemptAnswers';
 import type { Card } from '../engine/leitner';
 
 const DATABASE = 'patent.db';
@@ -505,11 +506,50 @@ export async function clearAllAttempts(): Promise<void> {
   await database.runAsync('DELETE FROM exam_attempts');
 }
 
-export interface AttemptAnswer {
-  questionId: string;
-  chosen: 'A' | 'B' | 'C' | null;
-  wasCorrect: boolean;
-  critical: boolean;
+/** One answer of a stored attempt — the shape lives with the rules that read it. */
+export type AttemptAnswer = StoredAnswer;
+
+/**
+ * Passes every attempt's answers through `transform` and writes back only the rows it
+ * changed, in one transaction — so an interrupted migration leaves nothing half-rewritten.
+ * Rows that can't be read are skipped, the same way the history screens skip them.
+ *
+ * @returns how many attempts were rewritten
+ */
+export async function rewriteAttemptAnswers(
+  transform: (
+    answers: AttemptAnswer[],
+    finishedAt: number,
+  ) => { answers: AttemptAnswer[]; changed: boolean },
+): Promise<number> {
+  const database = await db();
+  const rows = await database.getAllAsync<{ id: number; answers: string; finished_at: number }>(
+    'SELECT id, answers, finished_at FROM exam_attempts',
+  );
+
+  const updates: { id: number; answers: string }[] = [];
+  for (const row of rows) {
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(row.answers);
+    } catch {
+      continue;
+    }
+    if (!Array.isArray(parsed) || !parsed.every(isAnswer)) continue;
+    const result = transform(parsed, row.finished_at);
+    if (result.changed) updates.push({ id: row.id, answers: JSON.stringify(result.answers) });
+  }
+
+  if (updates.length === 0) return 0;
+  await database.withTransactionAsync(async () => {
+    for (const update of updates) {
+      await database.runAsync('UPDATE exam_attempts SET answers = ? WHERE id = ?', [
+        update.answers,
+        update.id,
+      ]);
+    }
+  });
+  return updates.length;
 }
 
 /**

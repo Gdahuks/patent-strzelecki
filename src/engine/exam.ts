@@ -19,6 +19,7 @@
  * what a course set is.
  */
 
+import { drawAnswers } from './answerDraw';
 import type { Letter, Question } from '../content/types';
 import { shuffle } from './leitner';
 
@@ -173,6 +174,14 @@ export interface ExamQuestion {
 export interface ExamAnswer {
   questionId: string;
   chosen: Letter | null;
+  /**
+   * The chosen answer's id and its text at the time of the exam. The letter alone means
+   * nothing once the bundle is refreshed — the course reshuffles answers on every scrape
+   * (`attemptAnswers.ts`). The id survives a typo fix; the text is the fallback for an
+   * answer the course has since dropped.
+   */
+  chosenId: string | null;
+  chosenText: string | null;
   wasCorrect: boolean;
   critical: boolean;
 }
@@ -516,11 +525,15 @@ export function drawExam(
   // says nothing about their order inside the four, and leaving them layer-ordered would
   // teach that positions three and four are always the safety ones. The `critical` flag is
   // positional over the whole group, so shuffling within it costs nothing.
-  return [...shuffle(critical, random), ...shuffle(rest, random)].map((entry, index) => ({
-    question: entry.question,
-    order: shuffle(Object.keys(entry.question.answers) as Letter[], random),
-    critical: index < critical.length,
-  }));
+  return [...shuffle(critical, random), ...shuffle(rest, random)].map((entry, index) => {
+    // Each paper draws its own pair of wrong answers from the pool, the way the course does.
+    const question = drawAnswers(entry.question, random);
+    return {
+      question,
+      order: shuffle(Object.keys(question.answers) as Letter[], random),
+      critical: index < critical.length,
+    };
+  });
 }
 
 export function gradeExam(
@@ -533,6 +546,8 @@ export function gradeExam(
     return {
       questionId: entry.question.id,
       chosen: pick,
+      chosenId: pick ? (entry.question.answerIds?.[pick] ?? null) : null,
+      chosenText: pick ? (entry.question.answers[pick] ?? null) : null,
       wasCorrect: pick === entry.question.correct,
       critical: entry.critical,
     };

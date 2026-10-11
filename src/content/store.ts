@@ -7,6 +7,7 @@
  * relative image paths to resolve against.
  */
 
+import { defaultView } from '../engine/answerDraw';
 import { CATEGORIES, category, partitionQuestions } from './categories';
 import type { ContentBundle, Lesson, Question, QuestionSet } from './types';
 
@@ -19,7 +20,18 @@ export const WEAK_SET_TITLE = 'Moje błędy';
 
 const bundle = require('../../assets/content/content.json') as ContentBundle;
 
-const questionsById = new Map(bundle.questions.map((question) => [question.id, question]));
+/**
+ * Questions in their stable, three-answer view. Asking a question draws its own pair of wrong
+ * answers from the pool (`drawAnswers`); everything that only shows one reads this view.
+ */
+const questions: Question[] = bundle.questions.map(defaultView);
+const questionsById = new Map(questions.map((question) => [question.id, question]));
+const optionTexts = new Map(
+  bundle.questions.map((question) => [
+    question.id,
+    new Map(question.options.map((option) => [option.id, option.text])),
+  ]),
+);
 const lessonsBySlug = new Map(bundle.lessons.map((lesson) => [lesson.slug, lesson]));
 const setsBySlug = new Map(bundle.sets.map((set) => [set.slug, set]));
 
@@ -34,7 +46,7 @@ const setsBySlug = new Map(bundle.sets.map((set) => [set.slug, set]));
  */
 const areaByQuestion: Map<string, string> = partitionQuestions(
   new Map(bundle.sets.map((set) => [set.slug, set.questionIds])),
-  bundle.questions,
+  questions,
 );
 
 /**
@@ -47,7 +59,7 @@ const areaByQuestion: Map<string, string> = partitionQuestions(
  */
 const idsByArea: Map<string, string[]> = (() => {
   const lists = new Map<string, string[]>(CATEGORIES.map((entry) => [entry.slug, []]));
-  for (const question of bundle.questions) {
+  for (const question of questions) {
     const area = areaByQuestion.get(question.id);
     if (area) lists.get(area)?.push(question.id);
   }
@@ -73,7 +85,7 @@ export const content = {
 
   lessons: [...bundle.lessons].sort((a, b) => a.order - b.order),
   sets: bundle.sets,
-  questions: bundle.questions,
+  questions,
   glossary: bundle.glossary ?? [],
 
   lessonSlugs: new Set(bundle.lessons.map((lesson) => lesson.slug)) as ReadonlySet<string>,
@@ -88,6 +100,19 @@ export const content = {
 
   question(id: string): Question | undefined {
     return questionsById.get(id);
+  },
+
+  /** An answer's current text by its id — undefined when the course no longer has it. */
+  optionText(questionId: string, answerId: string): string | undefined {
+    return optionTexts.get(questionId)?.get(answerId);
+  },
+
+  /** The id of the answer with exactly this text — for migrating answers stored as text. */
+  optionIdByText(questionId: string, text: string): string | undefined {
+    for (const [id, candidate] of optionTexts.get(questionId) ?? []) {
+      if (candidate === text) return id;
+    }
+    return undefined;
   },
 
   /**
