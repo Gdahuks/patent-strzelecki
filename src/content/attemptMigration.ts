@@ -33,6 +33,9 @@ let running: Promise<number> | null = null;
 export function migrateAttemptAnswers(): Promise<number> {
   running ??= (async () => {
     const version = materializedVersion();
+    // Already on this bundle: whatever is left unmigrated came from a bundle nobody kept the
+    // answers of, and no later start can tell more — so a start reads nothing at all.
+    if (version === content.version) return 0;
     // Loaded on the first attempt that needs it: once the history is migrated, a start reads
     // the attempts and never touches the 150 KB table.
     let loaded: { lookup: Lookup | null; notBefore: number | null } | null = null;

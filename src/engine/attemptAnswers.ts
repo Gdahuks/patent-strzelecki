@@ -113,8 +113,7 @@ function textFor(answer: StoredAnswer, lookup: Lookup | null): string | null {
  * explicit `null`) are left alone, so running this on every start changes nothing.
  *
  * Without a table nothing is written at all: the card hides an answer it can't read either
- * way, and an unwritten answer can still be migrated by a build that does have the table —
- * a written `null` could not.
+ * way, so there is nothing to gain from recording that it couldn't be read.
  */
 export function migrateAnswers(
   answers: readonly StoredAnswer[],
