@@ -3,6 +3,7 @@ import { Pressable, StyleSheet, Text } from 'react-native';
 
 import { content } from '../content/store';
 import type { AttemptAnswer } from '../db/database';
+import { chosenTextOf } from '../engine/attemptAnswers';
 import { useTheme } from '../theme';
 import { Card, Muted } from './ui';
 import { LawLink } from './LawLink';
@@ -32,6 +33,9 @@ export function AttemptAnswerCard({ answer }: { answer: AttemptAnswer }) {
   }
 
   const lesson = question.lesson ? content.lesson(question.lesson) : undefined;
+  const chosenText = chosenTextOf(answer, (questionId, answerId) =>
+    content.optionText(questionId, answerId),
+  );
 
   return (
     <Card>
@@ -42,9 +46,12 @@ export function AttemptAnswerCard({ answer }: { answer: AttemptAnswer }) {
       <Text style={[styles.question, { color: theme.text }]}>{question.question}</Text>
 
       {answer.wasCorrect ? null : answer.chosen ? (
-        <Text style={{ color: theme.bad, fontSize: 14 }}>
-          Twoja odpowiedź: {question.answers[answer.chosen]}
-        </Text>
+        // Read by id, never by letter: the letter belonged to the bundle the exam was taken
+        // with, and a content refresh reshuffles them. When the answer can't be recovered
+        // the line is left out — no line beats a wrong one (`attemptAnswers.ts`).
+        chosenText === null ? null : (
+          <Text style={{ color: theme.bad, fontSize: 14 }}>Twoja odpowiedź: {chosenText}</Text>
+        )
       ) : (
         <Text style={{ color: theme.bad, fontSize: 14 }}>Bez odpowiedzi</Text>
       )}

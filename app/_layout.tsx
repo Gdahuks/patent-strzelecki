@@ -6,6 +6,7 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 
 import { Button } from '../src/components/ui';
 import { HeaderTitle } from '../src/components/HeaderTitle';
+import { migrateAttemptAnswers } from '../src/content/attemptMigration';
 import { materializeContent } from '../src/content/materialize';
 import { SettingsProvider, useSettings } from '../src/settings/SettingsContext';
 import { lessonCss } from '../src/content/lessonCss';
@@ -81,10 +82,15 @@ function AppShell() {
     let cancelled = false;
 
     setError(null);
-    materializeContent(
-      lessonCss(theme, contentSize),
-      `${theme.dark ? 'dark' : 'light'}:${contentSize}`,
-    )
+    // The history migration first: it reads which bundle the device came from off the stamp
+    // that materialization is about to overwrite.
+    migrateAttemptAnswers()
+      .then(() =>
+        materializeContent(
+          lessonCss(theme, contentSize),
+          `${theme.dark ? 'dark' : 'light'}:${contentSize}`,
+        ),
+      )
       .then(() => {
         if (!cancelled) setReady(true);
       })

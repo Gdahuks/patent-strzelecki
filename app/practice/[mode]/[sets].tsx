@@ -19,6 +19,7 @@ import { useBottomInset } from '../../../src/components/safeArea';
 import { SegmentedBar } from '../../../src/components/ui';
 import { planPracticeSet, practiceSetTitle } from '../../../src/content/practiceSet';
 import { content } from '../../../src/content/store';
+import { drawAnswers } from '../../../src/engine/answerDraw';
 import type { Letter, Question } from '../../../src/content/types';
 import {
   type PracticeMode,
@@ -96,6 +97,12 @@ export default function ExerciseScreen() {
    * which was the reason for that sorting in the first place.
    */
   const [orders, setOrders] = useState<Map<string, Letter[]>>(new Map());
+  /**
+   * The answers each question was asked with. Part of the questions have a pool of wrong
+   * answers and every showing draws its own pair (`drawAnswers`), so the preview has to
+   * replay the draw — with the letters and the pick that belonged to it.
+   */
+  const [views, setViews] = useState<Map<string, Question>>(new Map());
   const [revealed, setRevealed] = useState(false);
 
   /** Questions shown this session, oldest first. The last one is the current one. */
@@ -138,10 +145,12 @@ export default function ExerciseScreen() {
     setNeedsManualNext(false);
 
     if (card) {
-      const question = content.question(card.questionId);
+      const base = content.question(card.questionId);
+      const question = base ? drawAnswers(base) : undefined;
       const drawn = shuffle(Object.keys(question?.answers ?? {}) as Letter[]);
       setOrder(drawn);
       setOrders((previous) => new Map(previous).set(card.questionId, drawn));
+      if (question) setViews((previous) => new Map(previous).set(card.questionId, question));
       setHistory((previous) => [...previous, card.questionId].slice(-HISTORY_LIMIT));
     }
   }, []);
@@ -163,6 +172,7 @@ export default function ExerciseScreen() {
       setHistory([]);
       setPicks(new Map());
       setOrders(new Map());
+      setViews(new Map());
       advance(state);
     })();
 
@@ -242,7 +252,7 @@ export default function ExerciseScreen() {
   const reviewing = reviewIndex !== null;
   const shownId = reviewing ? (history[reviewIndex] ?? null) : currentId;
   const shownPick = shownId ? (picks.get(shownId) ?? null) : null;
-  const question = shownId ? content.question(shownId) : undefined;
+  const question = shownId ? (views.get(shownId) ?? content.question(shownId)) : undefined;
 
   // In the preview we replay the order from when the question was asked, so the letters
   // match what was actually on screen. Alphabetical sorting is a fallback for questions from

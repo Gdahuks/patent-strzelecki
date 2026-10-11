@@ -11,7 +11,7 @@
 import { Directory, File, Paths } from 'expo-file-system';
 
 import { previewSource } from '../engine/assetPreview';
-import { isNoop, planMaterialize, stampFor } from '../engine/materializePlan';
+import { isNoop, planMaterialize, stampFor, versionOf } from '../engine/materializePlan';
 import { withDefinitions } from './glossaryScript';
 import { content } from './store';
 
@@ -31,6 +31,17 @@ const VERSION_FILE = 'wersja.txt';
 
 function root(): Directory {
   return new Directory(Paths.document, ROOT);
+}
+
+/**
+ * The bundle version the content on disk was written from — the bundle the device was on
+ * before this start, until `materializeContent` rewrites it. `null` on a fresh install.
+ *
+ * The attempt-history migration reads it for exactly that reason, so it has to run first.
+ */
+export function materializedVersion(): string | null {
+  const versionFile = new File(root(), VERSION_FILE);
+  return versionFile.exists ? versionOf(versionFile.textSync()) : null;
 }
 
 export function lessonFileUri(slug: string): string {

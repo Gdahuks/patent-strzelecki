@@ -1,0 +1,90 @@
+import assert from 'node:assert/strict';
+import { describe, it } from 'vitest';
+
+import type { BundleQuestion, Letter } from '../content/types';
+import { defaultView, drawAnswers } from './answerDraw';
+
+const POOLED: BundleQuestion = {
+  id: 'q',
+  question: 'Pytanie z pulą',
+  options: [
+    { id: 'q_1', text: 'zła jeden' },
+    { id: 'q_2', text: 'dobra' },
+    { id: 'q_3', text: 'zła trzy' },
+    { id: 'q_4', text: 'zła cztery' },
+  ],
+  correctId: 'q_2',
+  law: 'UoBiA art. 1',
+  lesson: 'uobia',
+};
+
+const FIXED: BundleQuestion = { ...POOLED, options: POOLED.options.slice(0, 3) };
+
+/** A deterministic source of "random" numbers, cycling through the given values. */
+function sequence(...values: number[]): () => number {
+  let index = 0;
+  return () => values[index++ % values.length];
+}
+
+function wrong(view: ReturnType<typeof defaultView>): string[] {
+  return (Object.keys(view.answers) as Letter[])
+    .filter((letter) => letter !== view.correct)
+    .map((letter) => view.answers[letter] as string);
+}
+
+describe('the default view', () => {
+  it('shows the correct answer and the first two wrong ones, by id', () => {
+    const view = defaultView(POOLED);
+
+    assert.deepEqual(view.answers, { A: 'zła jeden', B: 'dobra', C: 'zła trzy' });
+    assert.equal(view.correct, 'B');
+    assert.deepEqual(view.answerIds, { A: 'q_1', B: 'q_2', C: 'q_3' });
+  });
+
+  it('keeps the whole pool for later draws', () => {
+    assert.equal(defaultView(POOLED).options?.length, 4);
+    assert.equal(defaultView(POOLED).correctId, 'q_2');
+  });
+});
+
+describe('drawing the shown answers', () => {
+  it('always has three answers, one of them correct', () => {
+    for (const roll of [0, 0.3, 0.6, 0.99]) {
+      const view = drawAnswers(defaultView(POOLED), sequence(roll, 1 - roll));
+
+      assert.equal(Object.keys(view.answers).length, 3);
+      assert.equal(view.answers[view.correct], 'dobra');
+      assert.equal(view.answerIds?.[view.correct], 'q_2');
+    }
+  });
+
+  it('reaches every wrong answer of the pool', () => {
+    const seen = new Set<string>();
+    for (const roll of [0, 0.2, 0.4, 0.6, 0.8, 0.99]) {
+      for (const text of wrong(drawAnswers(defaultView(POOLED), sequence(roll)))) seen.add(text);
+    }
+
+    assert.deepEqual([...seen].sort(), ['zła cztery', 'zła jeden', 'zła trzy']);
+  });
+
+  it('letters and ids describe the same answers', () => {
+    const view = drawAnswers(defaultView(POOLED), sequence(0.7, 0.1));
+    const byId = new Map(POOLED.options.map((option) => [option.id, option.text]));
+
+    for (const letter of Object.keys(view.answers) as Letter[]) {
+      assert.equal(view.answers[letter], byId.get(view.answerIds?.[letter] ?? ''));
+    }
+  });
+
+  it('a question without a pool is shown as it is', () => {
+    const view = defaultView(FIXED);
+
+    assert.equal(drawAnswers(view, sequence(0.5)), view);
+  });
+
+  it('a hand-written question without pool fields is left alone', () => {
+    const literal = { ...defaultView(FIXED), options: undefined, answerIds: undefined };
+
+    assert.equal(drawAnswers(literal, sequence(0.5)), literal);
+  });
+});

@@ -50,6 +50,14 @@ rm -rf "$RELEASE_DIR/content"
 run cp -R "$CONTENT_DIR" "$RELEASE_DIR/content"
 run cmp "$MANIFEST" "$RELEASE_DIR/content/manifest.json"
 
+# Regenerated here, from every release before this one, rather than taken from the working
+# tree: it has to cover the bundle testers have now, which is a fact about the releases
+# directory, not about whatever was last built locally.
+legacy=$(node "$REPO/scripts/release/legacy-answers.ts" "$RELEASES_DIR" "$RELEASE_DIR/content/legacy-answers.json") \
+  || die "could not build the legacy answers table — see the message above"
+log "$legacy"
+checks "Tabela odpowiedzi z wydanych paczek (migracja historii egzaminu): ${legacy#legacy answers: }."
+
 meta_set contentVersion "$version"
 meta_set contentScrapedAt "$scraped_at"
 meta_set contentLessons "$lessons"

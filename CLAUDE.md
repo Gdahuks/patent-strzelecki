@@ -74,6 +74,21 @@ code**. These are conditions, not preferences.
 
 ## Things that are not obvious and easy to break
 
+**Answer letters mean nothing across bundles — store and compare answer ids.** The course
+reshuffles A/B/C on every page load, and for part of the questions (110 of 656 in October 2026)
+keeps a pool of wrong answers and draws two per showing. The bundle carries every question as
+`options: [{id, text}]` plus `correctId`; `engine/answerDraw.ts` turns that into the three-letter
+`Question` the screens use — `content.question()` is a stable default view, while the practice
+screen and the exam call `drawAnswers` on every showing. Exam attempts store `chosenId` and
+`chosenText`; the result card reads the current text by id (so a fixed typo shows up) and falls
+back to the stored text. Attempts from before ids were stored are migrated once on start, before
+`materializeContent` overwrites the stamp that says which bundle the device came from, using
+`assets/content/legacy-answers.json` — built by `make legacy-answers` (a prerequisite of every
+build target) from the content copies in the releases directory, and rebuilt by the release
+pipeline's content stage. Running `npx expo run:*` directly, without that file, fails at bundling.
+Before October 2026 the card looked the letter up in the current bundle, and a content refresh
+showed the correct answer as „Twoja odpowiedź".
+
 **The Expo SDK is pinned to 54, and stays that way — but not for Expo Go.** Read the exact
 versioned docs at https://docs.expo.dev/versions/v54.0.0/ before writing any code against this
 project.
