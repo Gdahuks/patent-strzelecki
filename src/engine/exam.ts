@@ -279,15 +279,6 @@ export function latestVerdicts(
 export interface AreaTally {
   seen: number;
   correct: number;
-  /**
-   * The questions behind `seen - correct`, i.e. the ones this area currently catches you on.
-   *
-   * Returned alongside the counts rather than gathered by a second function, and that is the
-   * point: "asked 11, 2 correct, repeat 16" was on screen because the count and the drill came
-   * from two different definitions of the area. Both now come from this one pass, so
-   * `missed.length === seen - correct` holds by construction.
-   */
-  missed: string[];
 }
 
 /**
@@ -328,10 +319,9 @@ export function areaProgress(
       if (!area) continue;
       settled.add(answer.questionId);
 
-      const entry = tally.get(area) ?? { seen: 0, correct: 0, missed: [] };
+      const entry = tally.get(area) ?? { seen: 0, correct: 0 };
       entry.seen += 1;
       if (answer.wasCorrect) entry.correct += 1;
-      else entry.missed.push(answer.questionId);
       tally.set(area, entry);
     }
   }

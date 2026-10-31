@@ -233,9 +233,8 @@ export function partitionQuestions(
   const unassigned = questions.map((q) => q.id).filter((id) => !thematic.has(id));
 
   const claimedBy = (entry: Category): string[] => {
-    // A set naming a question the bundle doesn't carry would otherwise get an area, be counted
-    // in `seen` and land in `missed` — then vanish when the drill turns ids back into
-    // questions, leaving "Powtórz 3" over two cards.
+    // A set naming a question the bundle doesn't carry would otherwise get an area and be
+    // counted in `seen` — "pytano o 3" over an area that can show only two of them.
     const ids = entry.setSlugs
       .flatMap((slug) => setMembers.get(slug) ?? [])
       .filter((id) => law.has(id));

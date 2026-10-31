@@ -58,15 +58,15 @@ export default function QuestionListScreen() {
   /**
    * Which of the two groupings this list shows, decided by where the reader came from.
    *
-   * `?egzamin=<profil>` arrives from the exam side — the area screen and the drill of an
-   * area's exam mistakes. There "przejrzyj pytania" is a question about exams, so the list
-   * groups by the latest exam verdict; the practice buckets answer something else and would
-   * be a third measure on a path that already carries two. Everywhere else the buckets are
+   * `?egzamin=<profil>` arrives from the exam side — the area screen. There "przejrzyj
+   * pytania" is a question about exams, so the list groups by the latest exam verdict; the
+   * practice buckets answer something else and would be a third measure on a path that already
+   * carries two. Everywhere else the buckets are
    * exactly what the reader is looking at.
    *
-   * The whole set either way. The drill narrows itself to six mistakes, but a review of them
-   * alone is a list you have already seen; what makes it useful is the rest of the area under
-   * it, in the order that says where you stand.
+   * The whole set either way: the mistakes alone are a list the exam summary already showed;
+   * what makes this useful is the rest of the area under them, in the order that says where you
+   * stand.
    */
   const examProfileId = params.egzamin;
 
