@@ -12,6 +12,7 @@ import {
 } from '../../src/db/database';
 import { createDeck, deckProgress } from '../../src/engine/leitner';
 import { plural } from '../../src/engine/plural';
+import { practiceRowLabel } from '../../src/engine/practiceRow';
 import { useSettings } from '../../src/settings/SettingsContext';
 import { useTheme } from '../../src/theme';
 
@@ -194,13 +195,8 @@ export default function CwiczeniaScreen() {
           onLongPress={() => onLongPress(item)}
           accessibilityRole="button"
           // The row is five separate labels plus a bar — a screen reader would read them as
-          // a string of numbers with no announcement of what set they belong to. The
-          // accessibility label turns it into a sentence.
-          accessibilityLabel={
-            `${item.title}. ${item.count} pytań, ${Math.round(item.ratio * 100)} procent. `
-            + `Do poprawy ${item.needsWork}, w trakcie ${item.learning}, opanowane ${item.mastered}`
-            + `${item.weak ? '' : `, nietknięte ${item.untouched}`}`
-          }
+          // a string of numbers with no announcement of what set they belong to.
+          accessibilityLabel={practiceRowLabel(item)}
           // Long-pressing is the only way to review questions and reset a set, and for a
           // screen reader that gesture is practically nonexistent — VoiceOver and TalkBack
           // have it claimed for their own purposes. This action exposes the same menu in the
