@@ -2,6 +2,7 @@ import { Pressable, StyleSheet, Text, View, useWindowDimensions } from 'react-na
 
 import { content } from '../content/store';
 import { type AreaTally, type ExamProfile, criticalAreas, profileAreas } from '../engine/exam';
+import { plural } from '../engine/plural';
 import { useTheme } from '../theme';
 import { Card, Muted } from './ui';
 
@@ -116,7 +117,7 @@ export function AreaStandings({
             `${content.titleForSets([slug])}. `
             + (enough
               ? `${Math.round(share * 100)} procent, ${tally.correct} z ${tally.seen}${weak ? ', do poprawy' : ''}`
-              : `${tally.correct} z ${tally.seen} pytań`)
+              : `${tally.correct} z ${tally.seen} ${plural(tally.seen, 'pytania', 'pytań', 'pytań')}`)
           }
           style={({ pressed }) => [
             styles.row,
