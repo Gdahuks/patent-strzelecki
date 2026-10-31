@@ -72,7 +72,7 @@ export function AreaStandings({
   if (slugs.length < 2 || attempts < MIN_ATTEMPTS) return null;
 
   const rows = slugs.map((slug) => {
-    const tally = areas.get(slug) ?? { seen: 0, correct: 0, missed: [] };
+    const tally = areas.get(slug) ?? { seen: 0, correct: 0 };
     const share = tally.seen > 0 ? tally.correct / tally.seen : 0;
     const enough = tally.seen >= MIN_ANSWERS;
     const critical = criticals.includes(slug);

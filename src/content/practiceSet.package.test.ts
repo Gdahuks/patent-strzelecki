@@ -5,7 +5,7 @@ import { fileURLToPath } from 'node:url';
 import { beforeAll, describe, it } from 'vitest';
 
 /**
- * The rule three screens read a practice route by.
+ * The rule two screens read a practice route by.
  *
  * A package test rather than a plain one because the titles come from the bundle: importing
  * the store at all needs `assets/content/`, which lives outside this repository.

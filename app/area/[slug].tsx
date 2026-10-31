@@ -26,10 +26,8 @@ import { useTheme } from '../../src/theme';
  * A practice row is state *and* the way in: it opens exactly the questions its numbers
  * describe, so the arrow needs no explaining. The exam row is neither — an exam is composed
  * from all five areas at once, so there is nothing here to open, and the row shows its state
- * only. What the exam leaves behind, its mistakes, is a different action on a different set of
- * questions, and it sits below the card with the other action rather than inside a row. That
- * row used to carry it as "powtórz 6 →", which made one row of three two lines tall and the
- * odd one out for doing something the others don't.
+ * only. Its mistakes are read in the review below the card, not repeated from here — see the
+ * comment there.
  */
 export default function AreaScreen() {
   const params = useLocalSearchParams<{ slug: string; profile?: string }>();
@@ -67,7 +65,7 @@ export default function AreaScreen() {
         );
         if (cancelled) return;
 
-        const tally = standings.areas.get(slug) ?? { seen: 0, correct: 0, missed: [] };
+        const tally = standings.areas.get(slug) ?? { seen: 0, correct: 0 };
         setExam({ seen: tally.seen, correct: tally.correct });
         setPractice({
           flashcards: summarize(ids, cards[0], levels),

@@ -61,8 +61,7 @@ describe('partitionQuestions', () => {
   });
 
   it('ignores a set naming a question the bundle does not carry', () => {
-    // Otherwise the ghost gets an area, is counted in `seen`, lands in `missed`, and then
-    // vanishes when the drill turns ids back into questions.
+    // Otherwise the ghost gets an area and is counted in `seen`, though no screen can show it.
     const areas = partitionQuestions(sets({ karne: ['k', 'ghost'] }), questions('k'), AREAS);
 
     assert.deepEqual([...areas], [['k', 'zg-wask']]);

@@ -440,7 +440,7 @@ describe('areaProgress', () => {
       areaOf,
     );
 
-    assert.deepEqual(tally.get('zg-bezpieczenstwo'), { seen: 1, correct: 1, missed: [] });
+    assert.deepEqual(tally.get('zg-bezpieczenstwo'), { seen: 1, correct: 1 });
   });
 
   it('takes the latest verdict, so it heals when someone improves', () => {
@@ -448,13 +448,13 @@ describe('areaProgress', () => {
     // forever; here the newer answer replaces it.
     const tally = areaProgress([[answer('d', true)], [answer('d', false)]], areaOf);
 
-    assert.deepEqual(tally.get('zg-regulaminy'), { seen: 1, correct: 1, missed: [] });
+    assert.deepEqual(tally.get('zg-regulaminy'), { seen: 1, correct: 1 });
   });
 
   it('and drops back when the latest answer is wrong again', () => {
     const tally = areaProgress([[answer('d', false)], [answer('d', true)]], areaOf);
 
-    assert.deepEqual(tally.get('zg-regulaminy'), { seen: 1, correct: 0, missed: ['d'] });
+    assert.deepEqual(tally.get('zg-regulaminy'), { seen: 1, correct: 0 });
   });
 
   it('keeps the areas apart', () => {
@@ -463,27 +463,8 @@ describe('areaProgress', () => {
       areaOf,
     );
 
-    assert.deepEqual(tally.get('zg-bezpieczenstwo'), { seen: 2, correct: 1, missed: ['b'] });
-    assert.deepEqual(tally.get('zg-budowa'), { seen: 1, correct: 1, missed: [] });
-  });
-
-  it('lists exactly the questions behind "seen minus correct"', () => {
-    // The invariant the screen rests on: the drill offered next to a row is that row's own
-    // mistakes, no more and no fewer. Two counts from two definitions is what put "asked
-    // about 11, 2 correct" next to "repeat 16".
-    const tally = areaProgress(
-      [
-        [answer('a', false), answer('b', false)],
-        [answer('c', false), answer('d', true)],
-      ],
-      areaOf,
-    );
-
-    for (const [, entry] of tally) {
-      assert.equal(entry.missed.length, entry.seen - entry.correct);
-    }
-    assert.deepEqual(tally.get('zg-bezpieczenstwo')?.missed, ['a', 'b']);
-    assert.deepEqual(tally.get('zg-budowa')?.missed, ['c']);
+    assert.deepEqual(tally.get('zg-bezpieczenstwo'), { seen: 2, correct: 1 });
+    assert.deepEqual(tally.get('zg-budowa'), { seen: 1, correct: 1 });
   });
 
   it('counts every attempt, including papers drawn before the areas existed', () => {
@@ -493,7 +474,7 @@ describe('areaProgress', () => {
     const tally = areaProgress([[answer('wpa', false), answer('c', false)]], areaOf);
 
     assert.equal(tally.size, 1);
-    assert.deepEqual(tally.get('zg-budowa'), { seen: 1, correct: 0, missed: ['c'] });
+    assert.deepEqual(tally.get('zg-budowa'), { seen: 1, correct: 0 });
   });
 
   it('gives an empty tally for an empty history', () => {
