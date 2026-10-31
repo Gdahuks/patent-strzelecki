@@ -4,8 +4,8 @@ import { plural } from './plural';
  * What a screen reader says for a row of the practice list.
  *
  * The row is five separate labels plus a bar, so the label turns it into one sentence. It
- * lives here, not in the screen, because it is the one place the count is spelled out a
- * second time — and the copy in the screen read „33 pytań" while the row showed „33 pytania".
+ * lives here, not in the screen, so its wording can be tested: written inline it read
+ * „33 pytań" while the row showed „33 pytania".
  */
 export function practiceRowLabel(row: {
   title: string;
