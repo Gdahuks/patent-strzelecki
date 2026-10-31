@@ -15,9 +15,10 @@ import type { ContentBundle } from './types';
 const BUNDLE = join(dirname(fileURLToPath(import.meta.url)), '../../assets/content/content.json');
 
 describe.skipIf(!existsSync(BUNDLE))('drawing answers in the bundle', () => {
-  const bundle = JSON.parse(readFileSync(BUNDLE, 'utf8')) as ContentBundle;
-
   it('keeps the stable pair wherever the correct answer refers to the others', () => {
+    // Read inside the test: `skipIf` still runs the suite's body to collect it, and CI has
+    // no bundle.
+    const bundle = JSON.parse(readFileSync(BUNDLE, 'utf8')) as ContentBundle;
     const affected = bundle.questions.filter((question) =>
       question.options.some(
         (option) => option.id === question.correctId && refersToOtherAnswers(option.text),
