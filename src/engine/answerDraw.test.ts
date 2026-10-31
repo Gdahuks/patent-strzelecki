@@ -104,6 +104,10 @@ describe('drawing the shown answers', () => {
       'obie odpowiedzi są błędne',
       'żadna z odpowiedzi nie jest poprawna',
       'wszystkie odpowiedzi są poprawne',
+      'obie powyższe odpowiedzi są poprawne',
+      'żadna z powyższych',
+      'wszystkie powyższe',
+      'odpowiedzi A i B są poprawne',
     ]) {
       assert.equal(refersToOtherAnswers(text), true, text);
     }

@@ -55,13 +55,16 @@ export function defaultView(question: BundleQuestion): Question {
 
 /**
  * Whether an answer speaks about the other answers — "obie odpowiedzi są poprawne", "żadna
- * z odpowiedzi…". Matched on "odpowiedzi", not on the first word: "wszystkie naboje, bez
- * względu na ich przeznaczenie" is an answer of its own.
+ * z powyższych", "odpowiedzi A i B…". Matched on "odpowiedzi" or "powyższ…", not on the first
+ * word: "wszystkie naboje, bez względu na ich przeznaczenie" is an answer of its own.
  */
-const ABOUT_OTHER_ANSWERS = /^(obie|obydwie|wszystkie|żadna|żadne)\s+(z\s+)?odpowiedzi\b/i;
+const ABOUT_OTHER_ANSWERS =
+  /^(obie|obydwie|wszystkie|żadna|żadne)\s+(z\s+)?(powyższ\S*\s+)?(odpowiedzi|powyższ\S*)(?!\S)/i;
+const LETTER_PAIR = /^odpowiedzi\s+[a-d]\s+i\s+[a-d](?!\S)/i;
 
 export function refersToOtherAnswers(text: string): boolean {
-  return ABOUT_OTHER_ANSWERS.test(text.trim());
+  const trimmed = text.trim();
+  return ABOUT_OTHER_ANSWERS.test(trimmed) || LETTER_PAIR.test(trimmed);
 }
 
 /**
