@@ -53,10 +53,31 @@ export function defaultView(question: BundleQuestion): Question {
   );
 }
 
-/** A fresh pair of wrong answers from the pool — the question itself when there is no choice. */
+/**
+ * Whether an answer speaks about the other answers — "obie odpowiedzi są poprawne", "żadna
+ * z odpowiedzi…". Matched on "odpowiedzi", not on the first word: "wszystkie naboje, bez
+ * względu na ich przeznaczenie" is an answer of its own.
+ */
+const ABOUT_OTHER_ANSWERS = /^(obie|obydwie|wszystkie|żadna|żadne)\s+(z\s+)?odpowiedzi\b/i;
+
+export function refersToOtherAnswers(text: string): boolean {
+  return ABOUT_OTHER_ANSWERS.test(text.trim());
+}
+
+/**
+ * A fresh pair of wrong answers from the pool — the question itself when there is no choice.
+ *
+ * Also the question itself when its correct answer speaks about the other two: whether "obie
+ * odpowiedzi są poprawne" is true depends on the pair beside it, and the course's pools don't
+ * keep that promise — "Przemieszczaniem broni jest" had one in which 4 of 10 pairs made the
+ * key false. Its stable view is the pair 0.6.0 showed: with an unloaded and a loaded firearm.
+ */
 export function drawAnswers(question: Question, random: () => number = Math.random): Question {
   const { options, correctId } = question;
   if (!options || correctId === undefined) return question;
+
+  const correctText = options.find((option) => option.id === correctId)?.text;
+  if (correctText !== undefined && refersToOtherAnswers(correctText)) return question;
 
   const wrong = options.filter((option) => option.id !== correctId);
   if (wrong.length <= WRONG_SHOWN) return question;

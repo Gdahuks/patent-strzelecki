@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { describe, it } from 'vitest';
 
 import type { BundleQuestion, Letter } from '../content/types';
-import { defaultView, drawAnswers } from './answerDraw';
+import { defaultView, drawAnswers, refersToOtherAnswers } from './answerDraw';
 
 const POOLED: BundleQuestion = {
   id: 'q',
@@ -80,6 +80,49 @@ describe('drawing the shown answers', () => {
     const view = defaultView(FIXED);
 
     assert.equal(drawAnswers(view, sequence(0.5)), view);
+  });
+
+  it('a correct answer about the other answers keeps the stable pair', () => {
+    // "Both answers are correct" is true or false depending on which two it sits next to,
+    // so drawing a different pair can turn the key into a lie.
+    const both: BundleQuestion = {
+      ...POOLED,
+      options: [{ id: 'q_0', text: 'obie odpowiedzi są poprawne' }, ...POOLED.options],
+      correctId: 'q_0',
+    };
+    const view = defaultView(both);
+
+    for (const roll of [0, 0.3, 0.6, 0.99]) {
+      assert.equal(drawAnswers(view, sequence(roll, 1 - roll)), view);
+    }
+  });
+
+  it('tells such an answer by what it says, not by its first word', () => {
+    for (const text of [
+      'Obie odpowiedzi są prawidłowe',
+      'obydwie odpowiedzi są prawidłowe',
+      'obie odpowiedzi są błędne',
+      'żadna z odpowiedzi nie jest poprawna',
+      'wszystkie odpowiedzi są poprawne',
+    ]) {
+      assert.equal(refersToOtherAnswers(text), true, text);
+    }
+    for (const text of ['wszystkie naboje, bez względu na ich przeznaczenie', 'dobra']) {
+      assert.equal(refersToOtherAnswers(text), false, text);
+    }
+  });
+
+  it('such an answer among the wrong ones does not stop the draw', () => {
+    const withMeta: BundleQuestion = {
+      ...POOLED,
+      options: [...POOLED.options, { id: 'q_5', text: 'obie odpowiedzi są błędne' }],
+    };
+    const seen = new Set<string>();
+    for (const roll of [0, 0.2, 0.4, 0.6, 0.8, 0.99]) {
+      for (const text of wrong(drawAnswers(defaultView(withMeta), sequence(roll)))) seen.add(text);
+    }
+
+    assert.equal(seen.size, 4);
   });
 
   it('a hand-written question without pool fields is left alone', () => {
