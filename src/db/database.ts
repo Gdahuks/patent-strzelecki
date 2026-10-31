@@ -20,7 +20,6 @@ import {
   type AreaTally,
   type ExamProfileId,
   areaProgress,
-  examProfile,
   latestMisses,
   latestVerdicts,
 } from '../engine/exam';
@@ -449,33 +448,17 @@ export async function examVerdicts(profile: ExamProfileId): Promise<Map<string, 
 }
 
 /**
- * The questions one subject area currently catches you on.
- *
- * Reads the same tally the diagnosis shows, so the drill behind "powtórz N" is exactly the N
- * questions that number counts. Deliberately **not** "this profile's mistakes that happen to
- * belong to the area": that was the earlier rule, and since a paper draws each question from
- * one area only, it answered a different question than the counter beside it.
- */
-export async function areaMistakes(profile: ExamProfileId, area: string): Promise<string[]> {
-  const { areas } = await areaStandings(profile);
-  return areas.get(area)?.missed ?? [];
-}
-
-/**
  * The questions a practice plan names — the fetching half of `planPracticeSet`.
  *
- * Two of the three kinds of set live in this database rather than in the bundle, which is why
- * the rule (`src/content/practiceSet.ts`) and the reading (here) are split: the rule has to be
- * usable without the app, the reading needs a database.
+ * "Moje błędy" lives in this database rather than in the bundle, which is why the rule
+ * (`src/content/practiceSet.ts`) and the reading (here) are split: the rule has to be usable
+ * without the app, the reading needs a database.
  */
 export async function questionsForPlan(
   plan: PracticeSetPlan,
   mode: PracticeMode,
 ): Promise<Question[]> {
   if (plan.kind === 'weak') return content.questionsByIds(await weakQuestionIds(mode));
-  if (plan.kind === 'mistakes') {
-    return content.questionsByIds(await areaMistakes(examProfile(plan.profile).id, plan.area));
-  }
   return content.questionsForSets([...plan.slugs]);
 }
 
