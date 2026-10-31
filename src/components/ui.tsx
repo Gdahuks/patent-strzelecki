@@ -66,10 +66,13 @@ export function Button({
   label,
   onPress,
   tone = 'accent',
+  accessibilityLabel,
 }: {
   label: string;
   onPress: () => void;
   tone?: 'accent' | 'neutral';
+  /** For a label carrying a glyph a screen reader would read out, such as an arrow. */
+  accessibilityLabel?: string;
 }) {
   const theme = useTheme();
   const background = tone === 'accent' ? theme.accent : theme.surface;
@@ -78,6 +81,7 @@ export function Button({
     <Pressable
       onPress={onPress}
       accessibilityRole="button"
+      accessibilityLabel={accessibilityLabel}
       style={({ pressed }) => [
         styles.button,
         { backgroundColor: background, borderColor: theme.border },

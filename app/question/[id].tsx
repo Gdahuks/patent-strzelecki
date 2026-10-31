@@ -46,7 +46,8 @@ export default function QuestionScreen() {
 
       <Text style={[styles.question, { color: theme.text }]}>{question.question}</Text>
 
-      {/* The statements a "both answers…" key speaks about: true, so neither marked wrong. */}
+      {/* The statements a "both answers…" key speaks about. Unmarked: the key says whether they
+          are true, and a ✗ under "both are correct" would contradict it. */}
       {sheet.referred.map((option) => (
         <Answer key={option.id} option={option} kind="referred" />
       ))}
@@ -74,6 +75,7 @@ export default function QuestionScreen() {
         // not what the lesson is about at that spot.
         <Button
           label={`Lekcja: ${lesson.title} →`}
+          accessibilityLabel={`Otwórz lekcję: ${lesson.title}`}
           tone="neutral"
           onPress={() => router.push(`/learn/${lesson.slug}`)}
         />

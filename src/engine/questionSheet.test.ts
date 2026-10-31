@@ -32,19 +32,39 @@ describe('the question sheet', () => {
     assert.deepEqual(sheet.referred, []);
   });
 
+  /** A pooled question whose correct answer is `key`, with four statements beside it. */
+  function about(key: string): BundleQuestion {
+    return {
+      ...POOLED,
+      options: [
+        { id: 'q_0', text: key },
+        { id: 'q_1', text: 'stwierdzenie jeden' },
+        { id: 'q_2', text: 'stwierdzenie dwa' },
+        { id: 'q_3', text: 'stwierdzenie trzy' },
+        { id: 'q_4', text: 'stwierdzenie cztery' },
+      ],
+      correctId: 'q_0',
+    };
+  }
+
   it('shows the answers "obie odpowiedzi…" speaks about, unmarked, and nothing else', () => {
     // Under a correct "both answers are correct", the two statements it refers to are true —
     // listing them as wrong answers would contradict the key. The rest of the pool is left
     // out: "both" means the two the question is asked with.
-    const both: BundleQuestion = {
-      ...POOLED,
-      options: [{ id: 'q_0', text: 'obie odpowiedzi są poprawne' }, ...POOLED.options],
-      correctId: 'q_0',
-    };
-    const sheet = questionSheet(defaultView(both));
+    const sheet = questionSheet(defaultView(about('obie odpowiedzi są poprawne')));
 
     assert.equal(sheet.correct.text, 'obie odpowiedzi są poprawne');
-    assert.deepEqual(texts(sheet.referred), ['zła jeden', 'dobra']);
+    assert.deepEqual(texts(sheet.referred), ['stwierdzenie jeden', 'stwierdzenie dwa']);
+    assert.deepEqual(sheet.wrong, []);
+  });
+
+  it('lays out "obie odpowiedzi są błędne" the same way', () => {
+    // Here both statements are false, but the key already says so; the layout doesn't depend
+    // on which way the key goes.
+    const sheet = questionSheet(defaultView(about('obie odpowiedzi są błędne')));
+
+    assert.equal(sheet.correct.text, 'obie odpowiedzi są błędne');
+    assert.deepEqual(texts(sheet.referred), ['stwierdzenie jeden', 'stwierdzenie dwa']);
     assert.deepEqual(sheet.wrong, []);
   });
 

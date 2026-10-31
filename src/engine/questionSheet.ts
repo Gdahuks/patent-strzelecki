@@ -8,9 +8,10 @@ import { refersToOtherAnswers } from './answerDraw';
  * where someone looks up a question they found, and any of them may come up on the exam.
  *
  * The exception is a correct answer that speaks about the others ("obie odpowiedzi są
- * poprawne"): the two statements it refers to are true, so they can't be listed as wrong, and
- * the rest of the pool means nothing to it. Those questions show their stable three, with the
- * two statements unmarked in `referred`.
+ * poprawne", "…są błędne"): whether the two statements it refers to are true is the key's to
+ * say, not a mark's — under "both are correct" a ✗ on each would contradict it — and the rest
+ * of the pool means nothing to it. Those questions show their stable three, with the two
+ * statements unmarked in `referred`.
  */
 export interface QuestionSheet {
   correct: AnswerOption;
