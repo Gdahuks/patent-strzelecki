@@ -92,7 +92,7 @@ export function LawLink({ law, onOpen }: { law: string; onOpen?: () => void }) {
       // Deliberately small, even though a 13-pixel label gives a target below the guideline.
       // The legal basis sits **inside** tappable cards (a search result, a row in question
       // review), and a nested `Pressable` wins over its parent — every extra pixel added here
-      // is a tap stolen from the card, i.e. going to the act instead of to the lesson. The
+      // is a tap stolen from the card, i.e. going to the act instead of where the card leads. The
       // guideline loses to correctness here, and that's a deliberate choice.
       hitSlop={6}
       accessibilityRole="link"

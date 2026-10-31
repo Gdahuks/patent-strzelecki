@@ -292,22 +292,15 @@ export default function SearchScreen() {
             );
           }
 
-          const lesson = item.question.lesson ? content.lesson(item.question.lesson) : undefined;
           const correct = item.question.answers[item.question.correct] ?? '';
           const lawAction = lawAccessibilityAction(item.question.law);
-          // The row is only disabled once it leads nowhere at all: no lesson and no legal
-          // basis. A missing lesson alone can't disable it, because on a `disabled` element
-          // the platform can refuse to run a rotor action — and opening the act is sometimes
-          // the row's only remaining action.
-          const inert = !lesson && !lawAction;
 
           return (
             <Pressable
-              disabled={inert}
-              onPress={() =>
-                lesson &&
-                router.push(`/learn/${lesson.slug}?q=${encodeURIComponent(phrase.trim())}`)
-              }
+              // The question itself, not its lesson: the lesson used to open scrolled to the
+              // search phrase, which sits there by coincidence — "wyższej" landed on a paragraph
+              // about the civil code. The question screen leads on to the lesson.
+              onPress={() => router.push(`/question/${encodeURIComponent(item.question.id)}`)}
               accessibilityRole="button"
               // The legal basis is a separate, tappable element nested inside this row, and
               // a container's own label replaces the text assembled from its children —
@@ -316,9 +309,7 @@ export default function SearchScreen() {
                 `Pytanie: ${item.question.question}. `
                 + `Poprawna odpowiedź: ${correct}`
                 + `${item.question.law ? `. Podstawa prawna: ${item.question.law}` : ''}`
-                + `${lesson ? `. Otwiera lekcję ${lesson.title}` : ''}`
               }
-              accessibilityState={{ disabled: inert }}
               // The label above rescues the legal basis's **content**, but not the action:
               // a merged `Pressable` doesn't hand focus down to the nested `LawLink`. The
               // action comes back as a rotor action — the same way as in the question-review
@@ -350,9 +341,6 @@ export default function SearchScreen() {
                 style={[styles.answer, { color: theme.good }]}
               />
               {item.question.law ? <LawLink law={item.question.law} /> : null}
-              {lesson ? (
-                <Text style={[styles.excerpt, { color: theme.accent }]}>{lesson.title} →</Text>
-              ) : null}
             </Pressable>
           );
         }}
