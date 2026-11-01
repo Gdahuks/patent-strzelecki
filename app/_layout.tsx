@@ -112,7 +112,7 @@ function AppShell() {
         <Text style={[styles.title, { color: theme.text }]}>Nie udało się przygotować treści</Text>
         <Text style={[styles.detail, { color: theme.muted }]}>{error}</Text>
         <Text style={[styles.detail, { color: theme.muted }]}>
-          Zamknij i otwórz aplikację ponownie — pobieranie zacznie się od nowa.
+          Zamknij i otwórz aplikację ponownie — przygotowanie zacznie się od nowa.
         </Text>
       </View>
     );

@@ -10,6 +10,7 @@ import { content } from '../src/content/store';
 import { clearAllAttempts, resetAllProgress } from '../src/db/database';
 import { resetAllReading } from '../src/db/reading';
 import { levelsLabel } from '../src/db/settings';
+import { lessonCount, questionCount, setCount } from '../src/engine/contentCounts';
 import { formatDay } from '../src/engine/dates';
 import { LEVEL_CHOICES } from '../src/engine/leitner';
 import { plural } from '../src/engine/plural';
@@ -338,8 +339,8 @@ export default function SettingsScreen() {
       <Card>
         <Text style={[styles.label, { color: theme.text }]}>Treść</Text>
         <Muted>
-          {content.lessons.length} lekcji, {content.questions.length} pytań, {content.sets.length}{' '}
-          zestawów ćwiczeń.
+          {lessonCount(content.lessons.length)}, {questionCount(content.questions.length)},{' '}
+          {setCount(content.sets.length)} ćwiczeń.
         </Muted>
         <Muted>
           Materiały pochodzą z bezpłatnego kursu {COURSE_NAME}, prowadzonego przez Braterstwo

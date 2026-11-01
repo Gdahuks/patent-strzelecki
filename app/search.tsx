@@ -25,6 +25,7 @@ import {
 } from '../src/content/search';
 import { content } from '../src/content/store';
 import { startLabel } from '../src/content/versions';
+import { questionCountGenitive } from '../src/engine/contentCounts';
 import { useTheme } from '../src/theme';
 
 type Row = SearchHit | ActHit;
@@ -165,8 +166,9 @@ export default function SearchScreen() {
           phrase.trim().length === 0 ? (
             <View style={styles.hint}>
               <Muted>
-                Szukanie obejmuje treść {content.questions.length} pytań wraz z poprawną odpowiedzią
-                i podstawą prawną, tekst {content.lessons.length} lekcji oraz{' '}
+                Szukanie obejmuje treść {questionCountGenitive(content.questions.length)} wraz
+                z poprawną odpowiedzią i podstawą prawną, tekst {content.lessons.length} lekcji
+                oraz{' '}
                 {actLabel(allActs().filter(isReadable).length)}. Wielkość liter
                 i polskie znaki nie mają znaczenia — „bron" znajdzie „broń".
               </Muted>

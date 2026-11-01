@@ -39,7 +39,7 @@ sha=$(awk '{ print $1 }' "$RELEASE_DIR/SHA256SUMS")
 [ -n "$sha" ] || die "SHA256SUMS is empty"
 checks "## Do wgrania"
 checks "\`$RELEASE_DIR/app-release.aab\` ($size_mb MB), sha256 \`$sha\`."
-checks "Play Console → Testowanie → Test zamknięty → alpha → Utwórz nową wersję; konsola pokaże \`$version_code ($version)\`."
+checks "Play Console → Produkcja → Utwórz nową wersję; konsola pokaże \`$version_code ($version)\`."
 checks "Po wgraniu: \`make release-uploaded TAG=$TAG\`."
 meta_set finishedAt "$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
 stage_done
@@ -48,7 +48,7 @@ log ""
 log "Release $TAG"
 log "  package   $RELEASE_DIR/app-release.aab ($size_mb MB)"
 log "  sha256    $sha"
-log "  Play      $version_code ($version) — Testowanie → Test zamknięty → alpha → Utwórz nową wersję"
+log "  Play      $version_code ($version) — Produkcja → Utwórz nową wersję"
 log "  checks    $CHECKS"
 log "  after     make release-uploaded TAG=$TAG"
 if [ "$unverified" = 1 ]; then
