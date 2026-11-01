@@ -1,3 +1,8 @@
+---
+title: Polityka prywatności
+description: Polityka prywatności aplikacji Patent Strzelecki. Aplikacja nie zbiera danych o użytkowniku i niczego nie wysyła.
+---
+
 # Polityka prywatności — Patent Strzelecki
 
 Obowiązuje od 9 sierpnia 2026, ostatnio zmieniona 1 listopada 2026 (adres kontaktowy).

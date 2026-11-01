@@ -1,16 +1,17 @@
 # Patent Strzelecki
 
-![CI](https://github.com/Gdahuks/patent-strzelecki/actions/workflows/ci.yml/badge.svg)
+<a href="https://play.google.com/store/apps/details?id=io.github.gdahuks.patentstrzelecki"><img alt="Pobierz z Google Play" src="https://play.google.com/intl/pl/badges/static/images/badges/pl_badge_web_generic.png" height="80"></a>
 
-Aplikacja mobilna do nauki na teoretyczną część egzaminu na patent strzelecki PZSS.
+Aplikacja na Androida do nauki na teoretyczną część egzaminu na patent strzelecki PZSS
+i na pozwolenie na broń (WPA). Teoria z kursu, fiszki, testy, egzaminy próbne i pełne teksty
+przepisów działają bez internetu i bez zakładania konta. Aplikacja jest bezpłatna, nie ma
+reklam i niczego nie wysyła. Wersji na iPhone'a w App Store nie ma, kurs działa
+w przeglądarce na stronie kursu.
+
 Treść pochodzi z bezpłatnego kursu [patentstrzelecki.eu](https://patentstrzelecki.eu/)
-prowadzonego przez Braterstwo (Stowarzyszenie KS Amator).
-
-Cel: uczyć się na telefonie bez internetu, z trwałym postępem i prawdziwym egzaminem
-próbnym — czego wersja przeglądarkowa nie daje.
-
-Aplikację napisał Hubert Książek. Jest **nieoficjalna** — Braterstwo jej nie prowadzi
-i nie odpowiada za jej działanie; błędy i uwagi idą do autora aplikacji, nie do autorów
+prowadzonego przez Braterstwo (Stowarzyszenie KS Amator) i jest używana za zgodą autorów
+kursu. Aplikację napisał Hubert Książek. Jest **nieoficjalna**: Braterstwo jej nie prowadzi
+i nie odpowiada za jej działanie, więc błędy i uwagi idą do autora aplikacji, nie do autorów
 kursu. Adres do zgłoszeń jest w aplikacji, w ustawieniach.
 
 | | | | |
@@ -18,13 +19,41 @@ kursu. Adres do zgłoszeń jest w aplikacji, w ustawieniach.
 | ![Lekcja z interaktywnym schematem](docs/zrzuty/01-lekcja.png) | ![Test ABC po odpowiedzi](docs/zrzuty/02-test.png) | ![Akt prawny z przyszłym brzmieniem](docs/zrzuty/03-akt.png) | ![Egzamin próbny](docs/zrzuty/04-egzamin.png) |
 | Lekcja — schemat reaguje na dotknięcie, choć skrypty kursu są wycinane przy budowie paczki | Test ABC — werdykt niesie znak, nie sam kolor, a podstawa prawna odsłania się dopiero po odpowiedzi | Ustawa offline — przepis z uchwaloną przyszłą wersją mówi, od kiedy się zmieni | Egzamin na zasadach § 19 regulaminu PZSS — pasek pokazuje stan arkusza, pytania krytyczne są oznaczone |
 
-## Co jest w środku
+## Co robi aplikacja
+
+- **Nauka.** Cała teoria kursu offline, z odnośnikami działającymi wewnątrz aplikacji,
+  dymkami skrótów, postępem czytania i szukaniem na stronie.
+- **Ćwiczenia.** Fiszki i test ABC z osobnym postępem (powtórki Leitnera, liczba poziomów
+  do ustawienia), zestawy kursu i zestaw „moje błędy”, przegląd wszystkich pytań zestawu
+  z podziałem na stany i ręczną korektą.
+- **Egzamin próbny na patent.** 10 pytań, 20 minut, próg 9/10. Arkusz jest składany po
+  zagadnieniach § 19 regulaminu patentowego PZSS: cztery pytania z ustawy i zasad
+  bezpieczeństwa bez prawa błędu, dalej po dwa z pozostałych trzech zagadnień.
+- **Wyniki po zagadnieniach** liczone z własnych podejść. Z każdego wiersza wchodzi się
+  w zagadnienie: jego pytania w podziale na błędne, poprawne i pozostałe oraz powtórka
+  własnych pomyłek. Do tego historia podejść i egzamin z puli własnych pomyłek.
+- **Egzamin próbny na WPA** na zasadach z § 4 rozporządzenia o egzaminie.
+- **Akty prawne.** Czytanie całych ustaw offline, spis jednostek, skoki z podstaw prawnych
+  pytań do wskazanego ustępu, punktu albo litery, przypisy jako dymki.
+- **Szukanie** po pytaniach, lekcjach i tekstach ustaw, z przejściem w konkretne miejsce.
+
+Paczka treści na dzień pisania: **11 lekcji, 656 pytań, 15 zestawów ćwiczeń, 14 obrazków**
+oraz **11 pozycji prawnych**. Pięć ma pełny tekst offline (ustawa o broni i amunicji,
+Kodeks karny, Kodeks wykroczeń, rozporządzenie o noszeniu i przechowywaniu oraz
+rozporządzenie o egzaminie), pozostałe są odnośnikami, bo rejestr Sejmu ma je wyłącznie
+w postaci skanów.
+
+## Dla deweloperów
+
+![CI](https://github.com/Gdahuks/patent-strzelecki/actions/workflows/ci.yml/badge.svg)
+
+### Co jest w środku
 
 ```
 app/       ekrany (Expo Router) — nauka, ćwiczenia, egzamin, akty prawne, szukanie, ustawienia
 src/       logika: engine (powtórki, egzamin), content (paczka treści), db, navigation
 assets/    ikony i paczka treści (assets/content/ — poza gitem, patrz „Skąd się bierze treść")
-docs/      polityka prywatności
+docs/      strona projektu (GitHub Pages) i polityka prywatności
 ```
 
 `CLAUDE.md` (w katalogu głównym) jest zapisem pułapek i decyzji projektowych — dlaczego coś
@@ -33,30 +62,7 @@ agentów kodujących, ale to też najkrótsza droga dla człowieka, który wchod
 pierwszy. `LICENSE` i `NOTICE` opisują, na jakiej licencji stoi kod i co z tego wyłączone —
 patrz „Licencja i prawa do treści" niżej.
 
-Paczka treści na dzień pisania: **11 lekcji, 656 pytań, 15 zestawów ćwiczeń, 14 obrazków**
-oraz **11 pozycji prawnych** — pięć z pełnym tekstem offline (ustawa o broni i amunicji,
-Kodeks karny, Kodeks wykroczeń, rozporządzenie o noszeniu i przechowywaniu oraz
-rozporządzenie o egzaminie), pozostałe jako odnośniki, bo rejestr Sejmu ma je wyłącznie
-w postaci skanów.
-
-Co robi aplikacja:
-
-- **Nauka** — cała teoria kursu offline, z odnośnikami działającymi wewnątrz aplikacji,
-  dymkami skrótów, postępem czytania i szukaniem na stronie.
-- **Ćwiczenia** — fiszki i test ABC z osobnym postępem (powtórki Leitnera, liczba poziomów
-  do ustawienia), zestawy kursu i zestaw „moje błędy", przegląd wszystkich pytań zestawu
-  z podziałem na stany i ręczną korektą.
-- **Egzamin** — 10 pytań, 20 minut, próg 9/10; arkusz składany po zagadnieniach § 19 regulaminu
-  patentowego PZSS: cztery pytania z ustawy i zasad bezpieczeństwa bez prawa błędu, dalej po dwa
-  z pozostałych trzech zagadnień. Do tego wyniki po zagadnieniach liczone z własnych podejść —
-  z każdego wiersza wchodzi się w zagadnienie, jego pytania w podziale na błędne, poprawne
-  i pozostałe oraz powtórkę własnych pomyłek — historia i egzamin z puli własnych pomyłek. Osobno egzamin przed komisją WPA na zasadach z § 4
-  rozporządzenia o egzaminie.
-- **Akty prawne** — czytanie całych ustaw offline, spis jednostek, skoki z podstaw prawnych
-  pytań, przypisy jako dymki.
-- **Szukanie** — po pytaniach, lekcjach i tekstach ustaw, z przejściem w konkretne miejsce.
-
-## Uruchomienie
+### Uruchomienie
 
 Wymagane: Node 20+. Cele `make icons` i `make icons-write` potrzebują dodatkowo `uv`
 z Pillow (`uv run --with pillow`) — nie są w żadnej codziennej ścieżce, więc bez nich
@@ -87,7 +93,7 @@ buildu debugowego, czyli tylko na czas pracy nad kodem.
 > podniesienie SDK te progi **podnosi**, czyli odcina starsze telefony, nie dając nic
 > w zamian. Szczegóły: `CLAUDE.md`.
 
-## Instalacja na iPhonie bez laptopa
+### Instalacja na iPhonie bez laptopa
 
 Do nauki w tramwaju trzeba zbudować aplikację z wszytym bundlem JS — build debugowy
 ciągnąłby kod z Metro, więc bez laptopa by nie wstał. Wymaga to pełnego Xcode (same
@@ -135,7 +141,7 @@ i flagi już nie dokłada, więc ósmego dnia build kończył się `No profiles 
 Płatne konto Apple Developer daje profil na rok i dostęp do TestFlight, czyli instalację bez
 kabla i bez trybu dewelopera.
 
-## Android
+### Android
 
 Do zbudowania wersji androidowej wystarczą **command line tools** z
 [developer.android.com](https://developer.android.com/studio) — całe Android Studio nie jest
@@ -163,7 +169,7 @@ make android       # build Release i instalacja na emulatorze albo telefonie
 Makefile woła narzędzia po pełnej ścieżce i sam eksportuje `ANDROID_HOME`, więc nie trzeba
 nic dopisywać do profilu shella. Inna lokalizacja SDK: `make android ANDROID_SDK=/ścieżka`.
 
-## Wersje i wydania
+### Wersje i wydania
 
 Konfiguracja Expo jest w dwóch plikach: `app.json` trzyma to, co stałe (nazwa,
 identyfikatory, ikony, wtyczki), a `app.config.js` dokłada to, co trzeba wyliczyć
@@ -211,7 +217,7 @@ wersja jest z `app.json`, a numer builda to `1`.
 Poprawka wysłana do sklepu **wymaga nowego commita**, nie tylko przebudowania — bez commita
 numer builda się nie zmienia.
 
-### Wydanie przez pipeline
+#### Wydanie przez pipeline
 
 Zamiast `make android-aab` i ręcznych sprawdzeń w gotowym pliku:
 
@@ -232,7 +238,7 @@ obowiązkowe (testy na emulatorze dopiero powstają) i zostawia w `checks.md` wy
 Paczkę treści pipeline bierze z `assets/content` (albo `PATENT_CONTENT_DIR`) — patrz „Skąd się
 bierze treść".
 
-### Uprawnienia Androida
+#### Uprawnienia Androida
 
 Wydanie deklaruje **zero uprawnień**. Pięć wnoszonych przez zależności (`INTERNET`,
 `SYSTEM_ALERT_WINDOW`, `READ_EXTERNAL_STORAGE`, `WRITE_EXTERNAL_STORAGE`, `VIBRATE`) zdejmuje
@@ -255,28 +261,28 @@ Sprawdzenie w gotowym APK — jedyne, co wypisze, to wewnętrzne uprawnienie And
   android/app/build/outputs/apk/release/app-release.apk
 ```
 
-## Skąd się bierze treść
+### Skąd się bierze treść
 
 Paczka treści (`assets/content/`) powstaje z kursu patentstrzelecki.eu i **nie ma jej w tym
 repozytorium** — należy do autorów kursu. Buduje ją osobne, prywatne narzędzie, które nie jest
 publikowane.
 
-W praktyce znaczy to, że po sklonowaniu tego repozytorium `make check` przechodzi (423 testy,
-sześć pomija się z braku paczki — dwa całe pliki testowe i jeden blok w trzecim), ale
-`make ios` czy `make android` nie zbudują działającej aplikacji. To jest świadome i wynika
-z warunków, na jakich autor korzysta z treści kursu.
+W praktyce znaczy to, że po sklonowaniu tego repozytorium `make check` przechodzi (testy
+zależne od paczki są wtedy pomijane), ale `make ios` czy `make android` nie zbudują
+działającej aplikacji. To jest świadome i wynika z warunków, na jakich autor korzysta
+z treści kursu.
 
-## Testy
+### Testy
 
 ```sh
 make check          # typy, linter i wszystkie testy — przed commitem
 ```
 
-429 testów logiki powtórek, egzaminu, przeglądu pytań, szukania, routera linków, czytania
-i skryptów wstrzykiwanych do WebView. Są wolne od importów z React Native, więc chodzą pod
+Testy obejmują logikę powtórek, egzaminu, przeglądu pytań, szukania, routera linków, czytania
+i skrypty wstrzykiwane do WebView. Są wolne od importów z React Native, więc chodzą pod
 zwykłym vitestem, bez uruchamiania aplikacji.
 
-## Zasady egzaminu
+### Zasady egzaminu
 
 Odtworzone za stroną `/patent-egzamin` kursu: 10 pytań, 20 minut, próg 9/10, przy czym
 pierwsze 4 pytania (UoBiA + zasady bezpieczeństwa) muszą być bezbłędne — każdy błąd w tej
@@ -309,3 +315,5 @@ Braterstwa.
 **Zgoda dotyczy tej aplikacji, nie tego repozytorium.** Kto klonuje ten kod, nie dostaje
 razem z nim prawa do treści kursu — na własne wydanie oparte na materiałach Braterstwa
 potrzebuje własnej zgody.
+
+Google Play i logo Google Play są znakami towarowymi Google LLC.
