@@ -6,7 +6,7 @@ Aplikacja na Androida do nauki na teoretyczną część egzaminu na patent strze
 i na pozwolenie na broń (WPA). Teoria z kursu, fiszki, testy, egzaminy próbne i pełne teksty
 przepisów działają bez internetu i bez zakładania konta. Aplikacja jest bezpłatna, nie ma
 reklam i niczego nie wysyła. Wersji na iPhone'a w App Store nie ma, kurs działa
-w przeglądarce na [patentstrzelecki.eu](https://patentstrzelecki.eu/).
+w przeglądarce na stronie kursu.
 
 Treść pochodzi z bezpłatnego kursu [patentstrzelecki.eu](https://patentstrzelecki.eu/)
 prowadzonego przez Braterstwo (Stowarzyszenie KS Amator) i jest używana za zgodą autorów
