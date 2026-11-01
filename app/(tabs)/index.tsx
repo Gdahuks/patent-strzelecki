@@ -22,6 +22,7 @@ import {
   readingLabel,
   setReadingState,
 } from '../../src/db/reading';
+import { lessonCount, questionCount } from '../../src/engine/contentCounts';
 import { plural } from '../../src/engine/plural';
 import { formatDay } from '../../src/engine/dates';
 import { useTheme } from '../../src/theme';
@@ -104,7 +105,7 @@ export default function NaukaScreen() {
           <Text style={[styles.heading, { color: theme.text }]}>Spis treści</Text>
           <Muted>
             Kurs teoretyczny na patent strzelecki PZSS. Materiał w całości offline —
-            {' '}{content.questions.length} pytań i {content.lessons.length} lekcji.
+            {' '}{questionCount(content.questions.length)} i {lessonCount(content.lessons.length)}.
           </Muted>
           {read > 0 ? (
             <Muted>
