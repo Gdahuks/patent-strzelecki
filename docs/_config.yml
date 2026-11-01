@@ -1,0 +1,19 @@
+# Site settings for the GitHub Pages build (actions/jekyll-build-pages, see .github/workflows/pages.yml).
+# Without this file the site ran on defaults: og:locale en_US, site name taken from the repo slug
+# and no description in <head>.
+title: Patent Strzelecki
+# Explicit so the sitemap and canonical links are absolute in a local build too; on GitHub the
+# github-metadata plugin sets the same values.
+url: https://gdahuks.github.io
+baseurl: /patent-strzelecki
+tagline: aplikacja do nauki na patent strzelecki
+description: Aplikacja na Androida do nauki na egzamin na patent strzelecki PZSS i pozwolenie na broń (WPA). Działa offline, bez konta.
+lang: pl-PL
+theme: jekyll-theme-primer
+plugins:
+  - jekyll-sitemap
+
+# Google Search Console ownership check. jekyll-seo-tag renders it as
+# <meta name="google-site-verification">, so the site needs no extra HTML file.
+# webmaster_verifications:
+#   google: <code from Search Console>
