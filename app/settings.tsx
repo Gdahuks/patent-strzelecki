@@ -106,7 +106,7 @@ const PLAY_PACKAGE = Platform.OS === 'android' ? Constants.expoConfig?.android?.
 
 /** Rating-star gold; darker on the light theme, where the bright one fades into white. */
 const STAR_DARK = '#f5b301';
-const STAR_LIGHT = '#c98a00';
+const STAR_LIGHT = '#a87000';
 
 export default function SettingsScreen() {
   const theme = useTheme();
@@ -115,9 +115,10 @@ export default function SettingsScreen() {
 
   /**
    * Mail goes through `Linking`, because `mailto:` isn't an address the in-app browser knows
-   * how to open — the one place where departing from `openInAppBrowser` is justified. A phone
-   * with no mail client configured declines the request, so the address lands on the
-   * clipboard instead: otherwise the tap would do nothing at all and look broken.
+   * how to open — one of two places, with `market://` below, where departing from
+   * `openInAppBrowser` is justified. A phone with no mail client configured declines the
+   * request, so the address lands on the clipboard instead: otherwise the tap would do
+   * nothing at all and look broken.
    */
   const report = useCallback(() => {
     Linking.openURL(reportMailto(RELEASE)).catch(() => {
@@ -321,7 +322,7 @@ export default function SettingsScreen() {
           are a picture, not a control: the rating itself is given in the Play Store, which is
           why the whole card is one tap target and the line under the stars names the store. */}
       {PLAY_PACKAGE ? (
-        <Card onPress={rate} accessibilityLabel="Oceń aplikację w Google Play">
+        <Card onPress={rate} accessibilityLabel="Oceń aplikację. Otwiera Sklep Play">
           <Text style={[styles.label, { color: theme.text }]}>Oceń aplikację</Text>
           <Text
             style={[styles.stars, { color: theme.dark ? STAR_DARK : STAR_LIGHT }]}

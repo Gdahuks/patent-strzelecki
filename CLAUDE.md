@@ -264,10 +264,12 @@ gap between samples may confirm a place on its own — a lesson left open in a p
 progress.
 
 **External links go through `expo-web-browser`, not `Linking.openURL`** — the latter crashed on
-iOS with "Unable to open URL". The one exception is the `mailto:` link on the "Aplikacja" card:
-a browser has no way to open an address that isn't a web page, so that one still uses `Linking`.
-The rejection **has to be handled**, because a phone with no mail account configured silently
-declines that request — the address is copied to the clipboard instead, with a message, so the
+iOS with "Unable to open URL". There are two exceptions, both addresses that aren't web pages,
+so a browser has no way to open them and they still use `Linking`: the `mailto:` link on the
+"Aplikacja" card, and the Android-only `market://` link on the "Oceń aplikację" card, whose
+rejection (no Play Store on the device) falls back to the web listing in the in-app browser.
+Both rejections **have to be handled**. A phone with no mail account configured silently
+declines the `mailto:` request — the address is copied to the clipboard instead, with a message, so the
 tap doesn't just do nothing.
 
 **The version line in Settings carries a `+` suffix when the build has uncommitted changes**
