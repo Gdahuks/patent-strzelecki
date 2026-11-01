@@ -14,6 +14,7 @@ import { formatDay } from '../src/engine/dates';
 import { LEVEL_CHOICES } from '../src/engine/leitner';
 import { plural } from '../src/engine/plural';
 import { REPORT_ADDRESS, reportMailto, versionLine } from '../src/engine/report';
+import { storeListingUrls } from '../src/engine/storeListing';
 import { useSettings } from '../src/settings/SettingsContext';
 import { useTheme } from '../src/theme';
 
@@ -96,6 +97,17 @@ function Link({
 const RELEASE = release();
 const RELEASE_LINE = versionLine(RELEASE);
 
+/**
+ * Only Android gets the rating link: the app is published on Google Play alone, and an iPhone
+ * build has no store listing to point at. Read from the build config rather than typed in, so
+ * the link follows the package if it is ever built under another one.
+ */
+const PLAY_PACKAGE = Platform.OS === 'android' ? Constants.expoConfig?.android?.package : undefined;
+
+/** Rating-star gold; darker on the light theme, where the bright one fades into white. */
+const STAR_DARK = '#f5b301';
+const STAR_LIGHT = '#a87000';
+
 export default function SettingsScreen() {
   const theme = useTheme();
   const paddingBottom = useBottomInset(32);
@@ -103,9 +115,10 @@ export default function SettingsScreen() {
 
   /**
    * Mail goes through `Linking`, because `mailto:` isn't an address the in-app browser knows
-   * how to open — the one place where departing from `openInAppBrowser` is justified. A phone
-   * with no mail client configured declines the request, so the address lands on the
-   * clipboard instead: otherwise the tap would do nothing at all and look broken.
+   * how to open — one of two places, with `market://` below, where departing from
+   * `openInAppBrowser` is justified. A phone with no mail client configured declines the
+   * request, so the address lands on the clipboard instead: otherwise the tap would do
+   * nothing at all and look broken.
    */
   const report = useCallback(() => {
     Linking.openURL(reportMailto(RELEASE)).catch(() => {
@@ -114,6 +127,17 @@ export default function SettingsScreen() {
       });
     });
   }, []);
+
+  /**
+   * `market://` goes through `Linking`, like `mailto:` above — the in-app browser can only open
+   * web pages. Without the Play Store on the device that request is declined, and the web
+   * listing opens instead, so the tap is never a dead end.
+   */
+  const rate = useCallback(() => {
+    if (!PLAY_PACKAGE) return;
+    const { market, web } = storeListingUrls(PLAY_PACKAGE);
+    Linking.openURL(market).catch(() => openInAppBrowser(web, theme));
+  }, [theme]);
 
   /**
    * Show a confirmation only where the system doesn't show its own.
@@ -293,6 +317,24 @@ export default function SettingsScreen() {
         </Pressable>
       </Card>
 
+      {/* Shaped like the rating prompts people know from other apps, so it reads as "rate"
+          at a glance; a plain text link at the bottom of the screen went unnoticed. The stars
+          are a picture, not a control: the rating itself is given in the Play Store, which is
+          why the whole card is one tap target and the line under the stars names the store. */}
+      {PLAY_PACKAGE ? (
+        <Card onPress={rate} accessibilityLabel="Oceń aplikację. Otwiera Sklep Play">
+          <Text style={[styles.label, { color: theme.text }]}>Oceń aplikację</Text>
+          <Text
+            style={[styles.stars, { color: theme.dark ? STAR_DARK : STAR_LIGHT }]}
+            importantForAccessibility="no"
+            accessibilityElementsHidden
+          >
+            ☆☆☆☆☆
+          </Text>
+          <Muted>w Google Play</Muted>
+        </Card>
+      ) : null}
+
       <Card>
         <Text style={[styles.label, { color: theme.text }]}>Treść</Text>
         <Muted>
@@ -388,4 +430,5 @@ const styles = StyleSheet.create({
   link: { paddingVertical: 8, gap: 2 },
   linkLabel: { fontSize: 15, fontWeight: '600' },
   linkHint: { fontSize: 13, lineHeight: 18 },
+  stars: { fontSize: 34, letterSpacing: 6 },
 });
