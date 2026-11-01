@@ -10,9 +10,9 @@
  * An iCloud Mail alias, not the main address. It can be switched off once it starts
  * collecting spam — something the main address can't do. It replaced a random-looking
  * Hide My Email address in November 2026; that one stays active, because builds up to
- * 0.6.2 still send their reports there. When the alias is replaced it has
- * to change **together** with the store listing, so the contact address in both places
- * points at the same mailbox.
+ * 0.6.2 still send their reports there. When the alias is replaced it has to change
+ * **together** with the store listing, so the contact address in both places points at
+ * the same mailbox.
  *
  * Assembled from parts rather than written out, because the repository is public and
  * address-harvesting bots crawl code for a `something@something.something` pattern. This
