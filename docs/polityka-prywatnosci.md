@@ -1,6 +1,7 @@
 # Polityka prywatności — Patent Strzelecki
 
-Obowiązuje od 9 sierpnia 2026. Dotyczy aplikacji mobilnej **Patent Strzelecki**
+Obowiązuje od 9 sierpnia 2026, ostatnio zmieniona 1 listopada 2026 (adres kontaktowy).
+Dotyczy aplikacji mobilnej **Patent Strzelecki**
 (identyfikator `io.github.gdahuks.patentstrzelecki`), której autorem jest
 Hubert Książek, osoba fizyczna.
 
@@ -46,7 +47,7 @@ Takie zgłoszenia służą wyłącznie odpowiedzi na nie i poprawieniu aplikacji
 nikomu udostępniane ani wykorzystywane do niczego innego. Do maila dopisywana jest
 wersja aplikacji, żeby dało się ustalić, której wersji dotyczy problem.
 
-Kontakt: **cordon42_wheaten@icloud.com**
+Kontakt: **patentstrzelecki@icloud.com**
 
 ## Dzieci
 
