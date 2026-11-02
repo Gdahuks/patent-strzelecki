@@ -15,5 +15,5 @@ plugins:
 
 # Google Search Console ownership check. jekyll-seo-tag renders it as
 # <meta name="google-site-verification">, so the site needs no extra HTML file.
-# webmaster_verifications:
-#   google: <code from Search Console>
+webmaster_verifications:
+  google: Gm5_Q44ACm7sC5oxDiPYpeBz-O6BdBHS4YtwtoHeodU
