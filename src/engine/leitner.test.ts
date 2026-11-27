@@ -88,15 +88,15 @@ function play(
   answer: (id: string, step: number) => boolean,
   steps: number,
   random: () => number,
-  goal?: number,
+  weak = false,
 ): { state: DeckState; shown: Shown[] } {
   let state = start;
   const shown: Shown[] = [];
   const last = new Map<string, number>();
   let avoid: string | null = null;
-  const top = goal ?? state.levels - 1;
+  const top = goalBucket(state.levels, weak);
   for (let step = 0; step < steps; step += 1) {
-    const card = nextCard(state, { random, avoid, goal });
+    const card = nextCard(state, { random, avoid, weak });
     if (!card) throw new Error(`null at step ${step}`);
     const prev = last.get(card.questionId);
     shown.push({
@@ -258,9 +258,33 @@ describe('nextCard', () => {
     };
 
     // Bucket one is the goal: 'a' is done, and the due mistake 'b' comes first.
-    assert.equal(nextCard(state, { random: () => 0, goal: 1 })?.questionId, 'b');
+    assert.equal(nextCard(state, { random: () => 0, weak: true })?.questionId, 'b');
     // Without that goal 'a' is still in play and, unseen in this entry, the most overdue.
     assert.equal(nextCard(state, { random: () => 0 })?.questionId, 'a');
+  });
+
+  it('clears a small mistakes set without padding it with questions already fixed', () => {
+    // The engine before spacing needed 14.7 answers on average for this very learner.
+    const known = new Map(
+      ids(5).map((id) => [id, { questionId: id, bucket: 0, seen: 1, correct: 0 }]),
+    );
+    let total = 0;
+    const runs = 200;
+    for (let seed = 0; seed < runs; seed += 1) {
+      const random = seeded(100 + seed);
+      let state = createDeck(ids(5), known, 3);
+      let avoid: string | null = null;
+      let answers = 0;
+      while (!deckComplete(state, true) && answers < 500) {
+        const card: Card = nextCard(state, { random, avoid, weak: true })!;
+        state = applyAnswer(state, card.questionId, random() < 0.6, random);
+        avoid = card.questionId;
+        answers += 1;
+      }
+      total += answers;
+    }
+
+    assert.ok(total / runs <= 14.7, `${total / runs} answers on average`);
   });
 
   it('statistical: no return within 3 for a simple learner, and mastery in under 400 answers', () => {

@@ -117,8 +117,13 @@ export interface NextCardOptions {
   random?: () => number;
   /** The question just answered — never asked twice in a row while there's anything else. */
   avoid?: string | null;
-  /** The bucket that counts as done for this set (`goalBucket`); the top bucket by default. */
-  goal?: number;
+  /**
+   * The mistakes set ("Moje błędy"): bucket one counts as done (`goalBucket`), and nothing
+   * already fixed is asked just to fill a gap — there, a fixed question answered wrong again
+   * falls back among the mistakes, and padding with them doubled the answers needed to clear
+   * a small set.
+   */
+  weak?: boolean;
 }
 
 /**
@@ -135,7 +140,8 @@ export interface NextCardOptions {
 export function nextCard(state: DeckState, options: NextCardOptions = {}): Card | null {
   const random = options.random ?? Math.random;
   const avoid = options.avoid ?? null;
-  const goal = options.goal ?? state.levels - 1;
+  const weak = options.weak ?? false;
+  const goal = goalBucket(state.levels, weak);
   const { session, counter } = state;
   if (state.cards.length === 0) return null;
 
@@ -207,7 +213,7 @@ export function nextCard(state: DeckState, options: NextCardOptions = {}): Card 
   };
 
   const stillLearning = inPlay.length + fresh.length > 0;
-  if (counter > 0 && counter % REVIEW_EVERY === 0 && rested.length > 0 && stillLearning) {
+  if (!weak && counter > 0 && counter % REVIEW_EVERY === 0 && rested.length > 0 && stillLearning) {
     return pickMastered(rested);
   }
   if (fresh.length > 0 && counter - session.lastNewAt >= NEW_EVERY) return any(fresh);
@@ -219,7 +225,7 @@ export function nextCard(state: DeckState, options: NextCardOptions = {}): Card 
     // rested review, and only then an early return.
     const ripe = state.refresh ? [] : inPlay.filter((card) => age(card) >= FILLER_MIN_AGE);
     if (ripe.length > 0) return mostOverdue(ripe);
-    if (rested.length > 0) return pickMastered(rested);
+    if (!weak && rested.length > 0) return pickMastered(rested);
     return mostOverdue(inPlay);
   }
   return pickMastered(rested, mastered);

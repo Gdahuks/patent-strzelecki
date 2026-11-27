@@ -35,7 +35,6 @@ import {
   createDeck,
   deckComplete,
   deckProgress,
-  goalBucket,
   nextCard,
   shuffle,
   startRefresh,
@@ -140,7 +139,7 @@ export default function ExerciseScreen() {
   useEffect(() => cancelPendingAdvance, [cancelPendingAdvance]);
 
   const advance = useCallback((state: DeckState, avoid: string | null = null) => {
-    const card = nextCard(state, { avoid, goal: goalBucket(state.levels, isWeak) });
+    const card = nextCard(state, { avoid, weak: isWeak });
     setCurrentId(card?.questionId ?? null);
     setPicked(null);
     setRevealed(false);
