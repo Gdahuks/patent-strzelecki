@@ -17,6 +17,7 @@ export type LinkTarget =
   | { kind: 'exercises' }
   | { kind: 'exam' }
   | { kind: 'image'; name: string }
+  | { kind: 'act'; slug: string; ref: string | null }
   | { kind: 'anchor'; id: string }
   | { kind: 'external'; url: string };
 
@@ -36,6 +37,7 @@ const NAMED_ROUTES = new Map<string, LinkTarget>([
 ]);
 
 const ASSETS = 'assets/';
+const ACT = 'act/';
 
 function splitSets(value: string): string[] {
   return value
@@ -91,6 +93,15 @@ export function resolveLink(
   // used to fall through to the browser as an unknown course sub-page.
   if (path.startsWith(ASSETS) && path.length > ASSETS.length) {
     return { kind: 'image', name: path.slice(ASSETS.length) };
+  }
+
+  // A course link to an act the app has offline, rewritten by the scraper from the ISAP
+  // address: "act/<slug>", plus "#<unit>" when the lesson names the article right before the
+  // link ("Art. 25 [[Kodeksu Karnego]]"). The scraper settles which act and which unit, and
+  // its bundle check guarantees both exist, so there's nothing to look up here.
+  if (path.startsWith(ACT) && path.length > ACT.length) {
+    const fragment = trimmed.includes('#') ? trimmed.slice(trimmed.indexOf('#') + 1) : '';
+    return { kind: 'act', slug: path.slice(ACT.length), ref: fragment || null };
   }
 
   const named = NAMED_ROUTES.get(path);
@@ -174,6 +185,8 @@ export function routeFor(target: LinkTarget): string | null {
       return '/practice';
     case 'exam':
       return '/exam';
+    case 'act':
+      return target.ref ? `/act/${target.slug}?ref=${target.ref}` : `/act/${target.slug}`;
     default:
       return null;
   }

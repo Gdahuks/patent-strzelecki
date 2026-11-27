@@ -185,7 +185,11 @@ after a content bundle update.
 a `file://` document, a root-relative link like `/pzss` resolves to the filesystem root, while a
 relative one resolves to the content directory — `fileUrlToHref` handles that distinction. An
 unrecognized internal path falls through to the system browser, because the course may have
-added a page since the bundle was last refreshed.
+added a page since the bundle was last refreshed. One path is ours, not the course's:
+`act/<slug>` (optionally `#arti_N`) is a course link to an act the app has offline, rewritten by
+the scraper from the ISAP address; it opens the act screen on that unit. The scraper settles the
+act and the unit and its bundle check guarantees both exist; `lessonActLinks.package.test.ts`
+checks this side against the real bundle.
 
 **Link clicks are intercepted on the page, not in `onShouldStartLoadWithRequest`.** A
 root-relative link from the course content ("/pzss") gets resolved by the browser, relative to

@@ -195,8 +195,8 @@ export default function ActScreen() {
   );
 
   // A phrase from search results wins over a unit jump: the highlight scrolls to the first
-  // hit on its own, and a unit ref only ever arrives from a question's legal basis, where
-  // there's no phrase.
+  // hit on its own, and a unit ref only ever arrives from a question's legal basis or a lesson
+  // link to the act, where there's no phrase.
   const onLoaded = useCallback(() => {
     if (findQuery) {
       rerunFind();
@@ -386,7 +386,7 @@ export default function ActScreen() {
           source={{ html: page }}
           originWhitelist={['*']}
           onMessage={onMessage}
-          // A jump from a question's legal basis only works once the content has loaded.
+          // A jump from a legal basis or a lesson link only works once the content has loaded.
           onLoadEnd={onLoaded}
           injectedJavaScript={
             `${readingScript(startPosition)}\n${findHelpersScript()}\n${glossaryScript()}`
