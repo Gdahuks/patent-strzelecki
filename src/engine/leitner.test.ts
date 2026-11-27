@@ -3,6 +3,7 @@ import { describe, it } from 'vitest';
 
 import {
   DEFAULT_LEVELS,
+  type Card,
   type DeckState,
   answerCard,
   applyAnswer,
@@ -12,7 +13,6 @@ import {
   goalBucket,
   newCard,
   nextCard,
-  pickBucket,
   shuffle,
   startRefresh,
   withCards,
@@ -62,77 +62,231 @@ describe('answerCard', () => {
   });
 });
 
-describe('pickBucket', () => {
-  it('returns null for an empty deck', () => {
-    assert.equal(pickBucket(deck([])), null);
-  });
+/** Deterministic random numbers, so statistical tests are repeatable. */
+function seeded(seed: number): () => number {
+  let a = seed >>> 0;
+  return () => {
+    a = (a + 0x6d2b79f5) >>> 0;
+    let t = a;
+    t = Math.imul(t ^ (t >>> 15), t | 1);
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
 
-  it('starts from the lowest bucket', () => {
-    assert.equal(pickBucket(deck(['a', 'b'])), 0);
-  });
+interface Shown {
+  id: string;
+  /** Answers since this question was last shown in the run, or null the first time. */
+  gap: number | null;
+  /** Whether it was below the goal bucket when shown. */
+  inPlay: boolean;
+}
 
-  it('skips empty buckets', () => {
-    let state = deck(['a']);
-    state = applyAnswer(state, 'a', true);
-    state = { ...state, counter: 0 };
+/** Plays `steps` answers through the engine, the way the practice screen does. */
+function play(
+  start: DeckState,
+  answer: (id: string, step: number) => boolean,
+  steps: number,
+  random: () => number,
+  goal?: number,
+): { state: DeckState; shown: Shown[] } {
+  let state = start;
+  const shown: Shown[] = [];
+  const last = new Map<string, number>();
+  let avoid: string | null = null;
+  const top = goal ?? state.levels - 1;
+  for (let step = 0; step < steps; step += 1) {
+    const card = nextCard(state, { random, avoid, goal });
+    if (!card) throw new Error(`null at step ${step}`);
+    const prev = last.get(card.questionId);
+    shown.push({
+      id: card.questionId,
+      gap: prev === undefined ? null : step - prev,
+      inPlay: card.bucket < top,
+    });
+    last.set(card.questionId, step);
+    state = applyAnswer(state, card.questionId, answer(card.questionId, step), random);
+    avoid = card.questionId;
+  }
+  return { state, shown };
+}
 
-    assert.equal(pickBucket(state), 1);
-  });
+function ids(count: number): string[] {
+  return Array.from({ length: count }, (_, i) => `q${i + 1}`);
+}
 
-  it('checks a higher bucket once its interval is up', () => {
-    let state = deck(['a', 'b']);
-    state = applyAnswer(state, 'a', true);
-    state = applyAnswer(state, 'a', true);
-
-    // 'a' is in bucket 2, 'b' is still in bucket zero; bucket 2's interval is every 9 answers.
-    assert.equal(pickBucket({ ...state, counter: 9 }), 2);
-    assert.equal(pickBucket({ ...state, counter: 10 }), 0);
-  });
-});
+function masteredDeck(count: number, levels = 3): DeckState {
+  const known = new Map(
+    ids(count).map((id) => [id, { questionId: id, bucket: levels - 1, seen: 2, correct: 2 }]),
+  );
+  return createDeck(ids(count), known, levels);
+}
 
 describe('nextCard', () => {
   it('returns null for an empty deck', () => {
     assert.equal(nextCard(deck([])), null);
   });
 
-  it('picks a card from the chosen bucket', () => {
-    let state = deck(['a', 'b', 'c']);
-    state = applyAnswer(state, 'a', true);
-
-    const card = nextCard({ ...state, counter: 0 }, () => 0);
-
-    assert.ok(card);
-    assert.equal(card.bucket, 0);
-    assert.notEqual(card.questionId, 'a');
-  });
-
-  it('sticks with the only remaining card', () => {
-    const card = nextCard(deck(['jedyna']), () => 0.99);
-
-    assert.equal(card?.questionId, 'jedyna');
+  it('returns the only card of a one-card deck, even when it was just asked', () => {
+    assert.equal(nextCard(deck(['jedyna']), { avoid: 'jedyna' })?.questionId, 'jedyna');
   });
 
   it('avoids the question just asked', () => {
-    // In a small deck, the same question used to fire several times in a row, which with
-    // four advances needed to master a card looked like the app had frozen.
-    const state = deck(['a', 'b']);
+    assert.equal(nextCard(deck(['a', 'b']), { random: () => 0, avoid: 'a' })?.questionId, 'b');
+  });
 
-    for (const r of [0, 0.4, 0.9]) {
-      assert.equal(nextCard(state, () => r, 'a')?.questionId, 'b');
-      assert.equal(nextCard(state, () => r, 'b')?.questionId, 'a');
+  it('never returns null for a non-empty deck', () => {
+    const random = seeded(7);
+    for (const size of [1, 2, 3, 4, 5, 6]) {
+      for (const levels of [2, 3, 4, 5]) {
+        assert.doesNotThrow(() => play(deck(ids(size), levels), () => random() < 0.6, 200, random));
+      }
     }
   });
 
-  it('reaches into another bucket when the chosen one only has the last one left', () => {
-    let state = deck(['a', 'b']);
-    state = applyAnswer(state, 'b', true); // 'b' moves up, 'a' stays in bucket zero
+  it('does not bring an in-play question back before its gap while another is available', () => {
+    const { shown } = play(deck(ids(49), 3), () => false, 30, seeded(1));
 
-    assert.equal(nextCard({ ...state, counter: 0 }, () => 0, 'a')?.questionId, 'b');
+    const returns = shown.filter((s) => s.inPlay && s.gap !== null).map((s) => s.gap!);
+    assert.ok(returns.length > 0);
+    // G = 10 for 49 questions, times the smallest spacing factor.
+    assert.ok(Math.min(...returns) >= 8, `returned after ${Math.min(...returns)}`);
   });
 
-  it('returns the same card when the deck has only one', () => {
-    // Nothing to interleave with — better to repeat than to show nothing.
-    assert.equal(nextCard(deck(['jedyna']), () => 0, 'jedyna')?.questionId, 'jedyna');
+  it('introduces a new question with at most 5 other answers in between while new ones remain', () => {
+    const known = new Map(
+      ids(20).map((id) => [id, { questionId: id, bucket: 0, seen: 1, correct: 0 }]),
+    );
+    const { shown } = play(createDeck(ids(49), known, 3), () => false, 200, seeded(2));
+
+    const fresh = new Set(ids(49).slice(20));
+    const newAt = shown.flatMap((s, i) => (fresh.has(s.id) && s.gap === null ? [i] : []));
+    assert.equal(newAt.length, 29);
+    for (let i = 1; i < newAt.length; i += 1) assert.ok(newAt[i] - newAt[i - 1] <= 6);
+  });
+
+  it('shrinks the gap at the end of learning, but not below 4', () => {
+    const known = new Map(
+      ids(49).map((id, i) => [
+        id,
+        i < 2
+          ? { questionId: id, bucket: 0, seen: 1, correct: 0 }
+          : { questionId: id, bucket: 2, seen: 2, correct: 2 },
+      ]),
+    );
+    const hard = new Set(['q1', 'q2']);
+    const { shown } = play(createDeck(ids(49), known, 3), (id) => !hard.has(id), 60, seeded(3));
+
+    const returns = shown.filter((s) => hard.has(s.id) && s.gap !== null).map((s) => s.gap!);
+    assert.ok(Math.min(...returns) >= 4);
+    // Without shrinking, G = 10 would keep them away for at least 8.
+    assert.ok(Math.max(...returns) < 8);
+  });
+
+  it('does not shrink the gap in refresh', () => {
+    const start = startRefresh(masteredDeck(49));
+    let missed: string | null = null;
+    const { shown } = play(
+      start,
+      (id) => {
+        if (missed === null) missed = id;
+        return id !== missed;
+      },
+      80,
+      seeded(4),
+    );
+
+    const returns = shown.filter((s) => s.id === missed && s.gap !== null).map((s) => s.gap!);
+    assert.ok(returns.length > 0);
+    assert.ok(Math.min(...returns) >= 8, `returned after ${Math.min(...returns)}`);
+  });
+
+  it('refresh shows every question once before any repeats, on entry to a mastered set', () => {
+    const { shown } = play(startRefresh(masteredDeck(49)), () => true, 49, seeded(5));
+
+    assert.equal(new Set(shown.map((s) => s.id)).size, 49);
+  });
+
+  it('refresh shows every question once before any repeats, right after mastering in the same entry', () => {
+    const random = seeded(6);
+    let state = deck(ids(49), 3);
+    let avoid: string | null = null;
+    while (!deckComplete(state, false)) {
+      const card: Card = nextCard(state, { random, avoid })!;
+      state = applyAnswer(state, card.questionId, true, random);
+      avoid = card.questionId;
+    }
+
+    const { shown } = play(startRefresh(state), () => true, 49, random);
+
+    assert.equal(new Set(shown.map((s) => s.id)).size, 49);
+  });
+
+  it('does not repeat a mastered question within 3 at a lap boundary', () => {
+    const { shown } = play(startRefresh(masteredDeck(6)), () => true, 300, seeded(8));
+
+    const gaps = shown.filter((s) => s.gap !== null).map((s) => s.gap!);
+    assert.ok(Math.min(...gaps) >= 4, `repeated after ${Math.min(...gaps)}`);
+  });
+
+  it('a review of mastered material skips a freshly mastered question', () => {
+    const known = new Map([['x', { questionId: 'x', bucket: 2, seen: 2, correct: 2 }]]);
+    const base = createDeck(['x', ...ids(48)], known, 3);
+    const at = (answeredAt: Map<string, number>): DeckState => ({
+      ...base,
+      counter: 9,
+      session: { ...base.session, answeredAt, lastNewAt: 9 },
+    });
+
+    // Answered two answers ago: not rested, so the review slot goes to someone else.
+    assert.notEqual(nextCard(at(new Map([['x', 7]])), { random: () => 0 })?.questionId, 'x');
+    // Not seen in this entry: rested, and the ninth answer is its turn.
+    assert.equal(nextCard(at(new Map()), { random: () => 0 })?.questionId, 'x');
+  });
+
+  it('treats the goal bucket as mastered in the mistakes set', () => {
+    const known = new Map([
+      ['a', { questionId: 'a', bucket: 1, seen: 2, correct: 1 }],
+      ['b', { questionId: 'b', bucket: 0, seen: 1, correct: 0 }],
+      ['c', { questionId: 'c', bucket: 0, seen: 1, correct: 0 }],
+    ]);
+    const base = createDeck(['a', 'b', 'c'], known, 3);
+    const state: DeckState = {
+      ...base,
+      counter: 20,
+      session: { ...base.session, answeredAt: new Map([['b', 10], ['c', 19]]) },
+    };
+
+    // Bucket one is the goal: 'a' is done, and the due mistake 'b' comes first.
+    assert.equal(nextCard(state, { random: () => 0, goal: 1 })?.questionId, 'b');
+    // Without that goal 'a' is still in play and, unseen in this entry, the most overdue.
+    assert.equal(nextCard(state, { random: () => 0 })?.questionId, 'a');
+  });
+
+  it('statistical: no return within 3 for a simple learner, and mastery in under 400 answers', () => {
+    for (const seed of [11, 12, 13]) {
+      const random = seeded(seed);
+      const knowledge = new Map(ids(49).map((id) => [id, 0.55]));
+      let state = deck(ids(49), 3);
+      let avoid: string | null = null;
+      const last = new Map<string, number>();
+      let short = 0;
+      let answers = 0;
+      while (!deckComplete(state, false) && answers < 3000) {
+        const card: Card = nextCard(state, { random, avoid })!;
+        const prev = last.get(card.questionId);
+        if (card.bucket < 2 && prev !== undefined && answers - prev <= 3) short += 1;
+        last.set(card.questionId, answers);
+        const p = knowledge.get(card.questionId)!;
+        state = applyAnswer(state, card.questionId, random() < p, random);
+        knowledge.set(card.questionId, p + 0.25 * (1 - p));
+        avoid = card.questionId;
+        answers += 1;
+      }
+
+      assert.equal(short, 0, `seed ${seed}`);
+      assert.ok(answers < 400, `seed ${seed}: ${answers} answers`);
+    }
   });
 });
 
@@ -181,13 +335,15 @@ describe('createDeck', () => {
 describe('a wrong answer goes back for rework', () => {
   it('drops the question to the bottom and puts it ahead of mastered material', () => {
     let state = deck(['a', 'b']);
-    // 'a' climbs high, 'b' ends up answered wrong.
-    for (let i = 0; i < 3; i += 1) state = applyAnswer(state, 'a', true);
+    // 'a' climbs to the top, 'b' ends up answered wrong.
+    for (let i = 0; i < LEVELS - 1; i += 1) state = applyAnswer(state, 'a', true);
     state = applyAnswer(state, 'b', true);
     state = applyAnswer(state, 'b', false);
 
     assert.equal(state.cards.find((c) => c.questionId === 'b')?.bucket, 0);
-    assert.equal(nextCard({ ...state, counter: 0 }, () => 0)?.questionId, 'b');
+    // Next time the set is opened, the mistake comes back before mastered material.
+    const reopened = createDeck(['a', 'b'], new Map(state.cards.map((c) => [c.questionId, c])), LEVELS);
+    assert.equal(nextCard(reopened, { random: () => 0 })?.questionId, 'b');
   });
 
   it("doesn't let a deck count as mastered with a mistake in the middle", () => {
