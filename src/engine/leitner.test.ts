@@ -7,11 +7,15 @@ import {
   answerCard,
   applyAnswer,
   createDeck,
+  deckComplete,
   deckProgress,
+  goalBucket,
   newCard,
   nextCard,
   pickBucket,
   shuffle,
+  startRefresh,
+  withCards,
 } from './leitner';
 
 /** Five levels by default, so the tests see the full bucket ladder. */
@@ -355,5 +359,114 @@ describe('number of levels', () => {
     const state = applyAnswer(deck(['a'], 5), 'a', true);
 
     assert.equal(state.levels, 5);
+  });
+});
+
+describe('session memory', () => {
+  it('createDeck starts with empty memory and refresh off', () => {
+    const state = deck(['a', 'b']);
+
+    assert.equal(state.session.answeredAt.size, 0);
+    assert.equal(state.session.spacing.size, 0);
+    assert.equal(state.session.lap.size, 0);
+    assert.equal(state.session.lastNewAt, 0);
+    assert.equal(state.refresh, false);
+  });
+
+  it('applyAnswer records when the question was answered', () => {
+    let state = deck(['q1', 'q2']);
+    state = applyAnswer(state, 'q1', true);
+    state = applyAnswer(state, 'q2', false);
+    state = applyAnswer(state, 'q1', true);
+
+    assert.equal(state.session.answeredAt.get('q1'), 2);
+    assert.equal(state.session.answeredAt.get('q2'), 1);
+    assert.equal(state.counter, 3);
+  });
+
+  it('applyAnswer draws the spacing factor from the injected random', () => {
+    const low = applyAnswer(deck(['a']), 'a', true, () => 0);
+    const high = applyAnswer(deck(['a']), 'a', true, () => 0.9999);
+
+    assert.equal(low.session.spacing.get('a'), 0.8);
+    assert.ok(high.session.spacing.get('a')! > 1.39);
+    assert.ok(high.session.spacing.get('a')! < 1.4);
+  });
+
+  it('applyAnswer moves lastNewAt only for a never-seen question', () => {
+    let state = applyAnswer(deck(['a', 'b']), 'a', true);
+    assert.equal(state.session.lastNewAt, 1);
+
+    state = applyAnswer(state, 'a', true);
+    assert.equal(state.session.lastNewAt, 1);
+
+    state = applyAnswer(state, 'b', false);
+    assert.equal(state.session.lastNewAt, 3);
+  });
+
+  it('applyAnswer adds to the lap and does not mutate the input state', () => {
+    const before = deck(['a', 'b']);
+    const after = applyAnswer(before, 'a', true);
+
+    assert.ok(after.session.lap.has('a'));
+    assert.equal(before.session.lap.size, 0);
+    assert.equal(before.session.answeredAt.size, 0);
+    assert.equal(before.counter, 0);
+  });
+
+  it('applyAnswer starts a new lap once every question is in it', () => {
+    let state = deck(['q1', 'q2', 'q3']);
+    state = applyAnswer(state, 'q1', true);
+    state = applyAnswer(state, 'q2', true);
+    state = applyAnswer(state, 'q3', true);
+
+    assert.deepEqual([...state.session.lap], ['q3']);
+  });
+
+  it('withCards keeps session, counter and refresh', () => {
+    let state = applyAnswer(deck(['a', 'b'], 3), 'a', true);
+    state = startRefresh(state);
+    const known = new Map([['b', { questionId: 'b', bucket: 2, seen: 2, correct: 2 }]]);
+
+    const reloaded = withCards(state, createDeck(['a', 'b'], known, 3).cards);
+
+    assert.equal(reloaded.session, state.session);
+    assert.equal(reloaded.counter, state.counter);
+    assert.equal(reloaded.refresh, true);
+    assert.equal(reloaded.cards.find((c) => c.questionId === 'b')?.bucket, 2);
+  });
+
+  it('startRefresh turns refresh on and clears the lap, keeping answeredAt and counter', () => {
+    const answered = applyAnswer(deck(['a', 'b']), 'a', true);
+
+    const state = startRefresh(answered);
+
+    assert.equal(state.refresh, true);
+    assert.equal(state.session.lap.size, 0);
+    assert.equal(state.session.answeredAt.get('a'), 0);
+    assert.equal(state.counter, 1);
+  });
+
+  it('goalBucket is the top bucket, or bucket one for the mistakes set', () => {
+    assert.equal(goalBucket(3, false), 2);
+    assert.equal(goalBucket(5, false), 4);
+    assert.equal(goalBucket(3, true), 1);
+  });
+
+  it('deckComplete follows the set goal and stays false while refreshing', () => {
+    let mastered = deck(['a', 'b'], 3);
+    for (const id of ['a', 'a', 'b', 'b']) mastered = applyAnswer(mastered, id, true);
+
+    assert.equal(deckComplete(mastered, false), true);
+    assert.equal(deckComplete(startRefresh(mastered), false), false);
+    assert.equal(deckComplete(deck([], 3), false), false);
+
+    const known = new Map([
+      ['a', { questionId: 'a', bucket: 1, seen: 2, correct: 1 }],
+      ['b', { questionId: 'b', bucket: 0, seen: 1, correct: 0 }],
+    ]);
+    const weak = createDeck(['a', 'b'], known, 3);
+    assert.equal(deckComplete(weak, true), false);
+    assert.equal(deckComplete(applyAnswer(weak, 'b', true), true), true);
   });
 });

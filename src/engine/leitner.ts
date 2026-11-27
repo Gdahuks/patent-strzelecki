@@ -36,12 +36,43 @@ export interface Card {
   correct: number;
 }
 
+/**
+ * What the engine remembers about one entry into a set — never saved to the database.
+ *
+ * Picking the next question by spacing needs to know when each question was last answered.
+ * That memory is deliberately short-lived: leaving the set and coming back starts afresh.
+ */
+export interface SessionMemory {
+  /** questionId → value of `counter` at the moment it was answered in this entry. */
+  readonly answeredAt: ReadonlyMap<string, number>;
+  /** questionId → spacing factor drawn at its last answer, so returns don't fall into a rhythm. */
+  readonly spacing: ReadonlyMap<string, number>;
+  /** `counter` right after the last answer to a never-seen question; 0 at the start. */
+  readonly lastNewAt: number;
+  /** Questions answered since the current lap began. */
+  readonly lap: ReadonlySet<string>;
+}
+
 export interface DeckState {
   cards: Card[];
-  /** Answer counter — controls when we check the higher buckets. */
+  /** Answers given in this entry — the clock that spacing is measured in. */
   counter: number;
   /** Number of levels in this deck. The top bucket is `levels - 1`. */
   levels: number;
+  session: SessionMemory;
+  /**
+   * "Ćwicz dalej" on a mastered set: practice goes on without an end screen. Every new deck
+   * starts with it off — a reset that left it on would keep the end screen away for good.
+   */
+  refresh: boolean;
+}
+
+/** Range of the spacing factor; see `SessionMemory.spacing`. */
+export const SPACING_MIN = 0.8;
+export const SPACING_MAX = 1.4;
+
+function emptySession(): SessionMemory {
+  return { answeredAt: new Map(), spacing: new Map(), lastNewAt: 0, lap: new Set() };
 }
 
 export function newCard(questionId: string): Card {
@@ -63,6 +94,8 @@ export function createDeck(
     }),
     counter: 0,
     levels: Math.max(1, levels),
+    session: emptySession(),
+    refresh: false,
   };
 }
 
@@ -134,14 +167,70 @@ export function answerCard(
   };
 }
 
-export function applyAnswer(state: DeckState, questionId: string, wasCorrect: boolean): DeckState {
+export function applyAnswer(
+  state: DeckState,
+  questionId: string,
+  wasCorrect: boolean,
+  random: () => number = Math.random,
+): DeckState {
+  const card = state.cards.find((entry) => entry.questionId === questionId);
+  const { session } = state;
+  const counter = state.counter + 1;
+
+  let lap = new Set(session.lap).add(questionId);
+  // Once every question has been through this lap, the next one starts with this answer.
+  if (state.cards.every((entry) => lap.has(entry.questionId))) lap = new Set([questionId]);
+
   return {
     ...state,
-    counter: state.counter + 1,
-    cards: state.cards.map((card) =>
-      card.questionId === questionId ? answerCard(card, wasCorrect, state.levels) : card,
+    counter,
+    cards: state.cards.map((entry) =>
+      entry.questionId === questionId ? answerCard(entry, wasCorrect, state.levels) : entry,
     ),
+    session: {
+      answeredAt: new Map(session.answeredAt).set(questionId, state.counter),
+      spacing: new Map(session.spacing).set(
+        questionId,
+        SPACING_MIN + random() * (SPACING_MAX - SPACING_MIN),
+      ),
+      lastNewAt: card && card.seen === 0 ? counter : session.lastNewAt,
+      lap,
+    },
   };
+}
+
+/**
+ * Fresh cards from the database, same session.
+ *
+ * Coming back from the question list or an act reloads the buckets — a question may have been
+ * marked by hand there — but the spacing memory and "Ćwicz dalej" must survive the trip, or the
+ * end screen would pop up in the middle of refreshing.
+ */
+export function withCards(state: DeckState, cards: Card[]): DeckState {
+  return { ...state, cards };
+}
+
+/** "Ćwicz dalej": keep practising a mastered set. A new lap starts; the spacing memory stays. */
+export function startRefresh(state: DeckState): DeckState {
+  return { ...state, refresh: true, session: { ...state.session, lap: new Set() } };
+}
+
+/**
+ * The bucket a question has to reach for the set's goal. The mistakes set is about leaving
+ * bucket zero — answering every mistake correctly once — not about driving it to the top.
+ */
+export function goalBucket(levels: number, weak: boolean): number {
+  return weak ? 1 : Math.max(1, levels) - 1;
+}
+
+/**
+ * Whether the set's end screen is due — a single source for the screen and the screen reader.
+ * Never while refreshing: practice there goes on until the user leaves.
+ */
+export function deckComplete(state: DeckState, weak: boolean): boolean {
+  if (state.refresh) return false;
+  const summary = deckProgress(state);
+  return summary.total > 0 && (weak ? summary.perBucket[0] === 0 : summary.mastered === summary.total);
 }
 
 /**
