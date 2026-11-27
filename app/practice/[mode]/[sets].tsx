@@ -33,9 +33,12 @@ import {
   answerCard,
   applyAnswer,
   createDeck,
+  deckComplete,
   deckProgress,
   nextCard,
   shuffle,
+  startRefresh,
+  withCards,
 } from '../../../src/engine/leitner';
 import { plural } from '../../../src/engine/plural';
 import { useSettings } from '../../../src/settings/SettingsContext';
@@ -98,7 +101,7 @@ export default function ExerciseScreen() {
    * of wrong answers (`drawAnswers`); a question is drawn once per session, not per showing,
    * because picks and the preview are keyed by question — a redraw when the same question
    * came back would replay an old pick against a new pair of answers. The ref is the source
-   * for `advance`, which is memoised without dependencies; the state drives rendering.
+   * for `advance`, which is memoised and must not depend on it; the state drives rendering.
    */
   const viewsRef = useRef<Map<string, Question>>(new Map());
   const [views, setViews] = useState<Map<string, Question>>(new Map());
@@ -136,7 +139,7 @@ export default function ExerciseScreen() {
   useEffect(() => cancelPendingAdvance, [cancelPendingAdvance]);
 
   const advance = useCallback((state: DeckState, avoid: string | null = null) => {
-    const card = nextCard(state, undefined, avoid);
+    const card = nextCard(state, { avoid, weak: isWeak });
     setCurrentId(card?.questionId ?? null);
     setPicked(null);
     setRevealed(false);
@@ -156,7 +159,7 @@ export default function ExerciseScreen() {
       setOrders((previous) => new Map(previous).set(card.questionId, drawn));
       setHistory((previous) => [...previous, card.questionId].slice(-HISTORY_LIMIT));
     }
-  }, []);
+  }, [isWeak]);
 
   useEffect(() => {
     let cancelled = false;
@@ -222,8 +225,10 @@ export default function ExerciseScreen() {
    *
    * We reload **only the cards**. The current question, the review history and the
    * remembered picks stay untouched, because returning is meant to land on the same question
-   * — reloading the whole screen would restart the session. The answer counter stays too: it
-   * drives peeking into higher buckets, and resetting it would roll back the spacing rhythm.
+   * — reloading the whole screen would restart the session. The session memory stays too
+   * (`withCards`): the answer counter and when each question was last answered are what the
+   * spacing is measured in, and "Ćwicz dalej" must survive the trip, or the end screen would
+   * pop up in the middle of refreshing.
    */
   useFocusEffect(
     useCallback(() => {
@@ -243,7 +248,7 @@ export default function ExerciseScreen() {
         const known = await loadCards(ids, mode);
         if (cancelled) return;
         setDeck((state) =>
-          state ? { ...createDeck(ids, known, levels), counter: state.counter } : state,
+          state ? withCards(state, createDeck(ids, known, levels).cards) : state,
         );
       })();
 
@@ -292,17 +297,11 @@ export default function ExerciseScreen() {
    *
    * In the mistakes set, mastering the whole deck up to the top bucket is work spread across
    * many sessions. The goal there is leaving the zero bucket, i.e. answering every question
-   * you'd gotten wrong correctly once.
+   * you'd gotten wrong correctly once. Never while refreshing after "Ćwicz dalej": practice
+   * there goes on until the user leaves, so neither the end screen nor its announcement return.
    */
   const deckMastered = useCallback(
-    (state: DeckState | null): boolean => {
-      if (!state) return false;
-      const summary = deckProgress(state);
-      return (
-        summary.total > 0 &&
-        (isWeak ? summary.perBucket[0] === 0 : summary.mastered === summary.total)
-      );
-    },
+    (state: DeckState | null): boolean => (state ? deckComplete(state, isWeak) : false),
     [isWeak],
   );
 
@@ -428,6 +427,24 @@ export default function ExerciseScreen() {
     );
   }, [questions, mode, levels, advance, cancelPendingAdvance]);
 
+  /**
+   * "Ćwicz dalej": keep practising a mastered set without resetting it.
+   *
+   * After the last correct answer the next question is still 550 ms away — or, with a screen
+   * reader, isn't coming at all — so the current one may already be answered. Only then do we
+   * draw a new one; otherwise the question drawn in the background stays, and a second draw
+   * would leave an entry in the history that nobody saw.
+   */
+  const onPracticeOn = useCallback(() => {
+    cancelPendingAdvance();
+    if (!deck) return;
+    const next = startRefresh(deck);
+    setDeck(next);
+    // Back to the current question in either case, not to a preview left open before.
+    if (picked !== null) advance(next, currentId);
+    else setReviewIndex(null);
+  }, [deck, picked, currentId, advance, cancelPendingAdvance]);
+
   const title = practiceSetTitle(plan);
 
   const header = (
@@ -493,16 +510,41 @@ export default function ExerciseScreen() {
             : `${progress.total} ${plural(progress.total, 'pytanie', 'pytania', 'pytań')} z „${title}” ${plural(progress.total, 'jest opanowane', 'są opanowane', 'jest opanowanych')}. Materiał siedzi — wróć tu za jakiś czas, żeby go odświeżyć.`}
         </Text>
 
+        {/* "Ćwicz dalej" first and filled: it has to be the obvious choice over a reset that
+            wipes the whole set's progress. Not in the mistakes set — that deck empties itself
+            once there are no mistakes left, so there's nothing to keep practising. */}
+        {isWeak ? null : (
+          <Pressable
+            onPress={onPracticeOn}
+            accessibilityRole="button"
+            style={({ pressed }) => [
+              styles.doneButton,
+              { backgroundColor: theme.accent },
+              pressed && styles.pressed,
+            ]}
+          >
+            <Text style={[styles.doneButtonLabel, { color: theme.onFill }]}>Ćwicz dalej</Text>
+          </Pressable>
+        )}
+
         <Pressable
           onPress={() => router.back()}
           accessibilityRole="button"
           style={({ pressed }) => [
             styles.doneButton,
-            { backgroundColor: theme.accent },
+            isWeak
+              ? { backgroundColor: theme.accent }
+              : {
+                backgroundColor: theme.surface,
+                borderWidth: StyleSheet.hairlineWidth,
+                borderColor: theme.border,
+              },
             pressed && styles.pressed,
           ]}
         >
-          <Text style={[styles.doneButtonLabel, { color: theme.onFill }]}>Wróć do ćwiczeń</Text>
+          <Text style={[styles.doneButtonLabel, { color: isWeak ? theme.onFill : theme.text }]}>
+            Wróć do ćwiczeń
+          </Text>
         </Pressable>
 
         {/* Reset only for a regular set: there's nothing to reset in the mistakes set,
