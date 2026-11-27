@@ -305,13 +305,17 @@ export default function ExerciseScreen() {
 
       return () => {
         cancelled = true;
-        // Leaving the screen: the 550 ms advance after a correct answer must not fire behind
-        // the exit animation and save a question nobody saw. Unmounting comes only after the
-        // animation; losing focus comes at its start.
-        cancelPendingAdvance();
       };
-    }, [mode, levels, cancelPendingAdvance]),
+    }, [mode, levels]),
   );
+
+  /**
+   * Leaving the screen: the 550 ms advance after a correct answer must not fire behind the exit
+   * animation and save a question nobody saw. Unmounting comes only after the animation; losing
+   * focus comes at its start. A separate effect, because the reload above registers no cleanup
+   * on the first entry, so leaving straight away by the header arrow would not cancel anything.
+   */
+  useFocusEffect(useCallback(() => cancelPendingAdvance, [cancelPendingAdvance]));
 
   const reviewing = reviewIndex !== null;
   const shownId = reviewing ? (history[reviewIndex] ?? null) : currentId;
