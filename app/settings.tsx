@@ -426,7 +426,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   dangerLabel: { fontSize: 15, fontWeight: '600' },
-  levelOption: { minWidth: 104 },
+  // Two by two: four captions in one row would break into three lines on a phone, and with
+  // the system text size raised they'd be cut off.
+  levelOption: { flexBasis: '45%', flexGrow: 1 },
   pressed: { opacity: 0.7 },
   link: { paddingVertical: 8, gap: 2 },
   linkLabel: { fontSize: 15, fontWeight: '600' },
