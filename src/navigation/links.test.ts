@@ -240,6 +240,28 @@ describe('isSameDocument', () => {
   });
 });
 
+describe('links to bundled acts', () => {
+  it('opens an act on the article the scraper resolved', () => {
+    assert.deepEqual(resolveLink('act/kodeks-karny#arti_25', LESSONS), {
+      kind: 'act',
+      slug: 'kodeks-karny',
+      ref: 'arti_25',
+    });
+  });
+
+  it('opens an act from the top without a unit', () => {
+    assert.deepEqual(resolveLink('act/uobia', LESSONS), { kind: 'act', slug: 'uobia', ref: null });
+  });
+
+  it('routes to the act screen with the unit as a parameter', () => {
+    assert.equal(
+      routeFor({ kind: 'act', slug: 'kodeks-karny', ref: 'arti_25' }),
+      '/act/kodeks-karny?ref=arti_25',
+    );
+    assert.equal(routeFor({ kind: 'act', slug: 'uobia', ref: null }), '/act/uobia');
+  });
+});
+
 describe('routeFor', () => {
   it('builds screen paths', () => {
     assert.equal(routeFor({ kind: 'lesson', slug: 'uobia' }), '/learn/uobia');
