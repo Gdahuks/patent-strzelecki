@@ -20,7 +20,8 @@
  * four repetitions per question, which is more than 656 questions call for.
  */
 export const DEFAULT_LEVELS = 3;
-export const LEVEL_CHOICES = [2, 3, 5] as const;
+/** 1, 2, 3 or 4 correct answers in a row; three is what the course itself recommends. */
+export const LEVEL_CHOICES = [2, 3, 4, 5] as const;
 
 export interface Card {
   questionId: string;

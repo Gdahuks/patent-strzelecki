@@ -17,11 +17,18 @@ describe('parseLevels', () => {
     }
   });
 
+  it('offers three correct answers in a row, as the course recommends', () => {
+    // Four levels: three correct answers to master. The course says to repeat a question
+    // „dopóki nie odpowiesz poprawnie trzy razy z rzędu", and that value used to be missing.
+    assert.equal(parseLevels('4'), 4);
+    assert.match(levelsLabel(4), /^3 poprawne/);
+  });
+
   it('a value outside the allowed set falls back to the default', () => {
     // Bucket zero at one level is simultaneously the bottom and the top, so `deckProgress`
     // would produce a negative count of "learning" questions. This filter is the only thing
     // ruling that out — hence the separate test case for 1.
-    for (const value of ['1', '0', '4', '99', '-3']) {
+    for (const value of ['1', '0', '6', '99', '-3']) {
       assert.equal(parseLevels(value), DEFAULT_LEVELS);
     }
   });
