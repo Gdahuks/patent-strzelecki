@@ -311,7 +311,18 @@ being permanently visible.
 
 **Previewing an earlier question remembers the pick and the answer order** (the `picks` and
 `orders` maps on the practice screen, kept in memory only — nothing is written to the database,
-since the preview only ever looks at the current session). The `picked` state belongs to the
+since the preview only ever looks at the current session).
+
+**A practice session outlives the practice screen, but not the process**
+(`src/engine/practiceSession.ts`). The screen saves a snapshot of everything it shows into a
+module-level map on every change, keyed by mode and the route's sets, and restores it on the
+next entry — the header arrow sits right next to "‹ Poprzednie", and one wrong tap used to throw
+the whole history away. The owner asked for it to last "w ramach otwarcia" and no longer, so
+there is deliberately no database or AsyncStorage behind it. Three things keep it honest:
+`resetProgress` and `resetAllProgress` clear every session (otherwise a wiped card would come
+back); the mistakes set is matched by the snapshot's own bucket-zero questions, since the
+database stops listing a mistake the moment it is fixed; and the drawn answers are restored
+into `viewsRef` as well as the `views` state, because `advance` reads the ref. The `picked` state belongs to the
 current question, so without these maps the preview showed only the correct answer. Order is
 remembered, not sorted alphabetically: sorting was meant to avoid re-shuffling on re-render, but
 then an answer picked as "A" came back labelled "B".
