@@ -41,6 +41,11 @@ import {
   withCards,
 } from '../../../src/engine/leitner';
 import { plural } from '../../../src/engine/plural';
+import {
+  restoreSession,
+  saveSession,
+  sessionKey,
+} from '../../../src/engine/practiceSession';
 import { useSettings } from '../../../src/settings/SettingsContext';
 import { useTheme } from '../../../src/theme';
 
@@ -73,6 +78,7 @@ export default function ExerciseScreen() {
    */
   const plan = useMemo(() => planPracticeSet(setSlugs), [setSlugs]);
   const isWeak = plan.kind === 'weak';
+  const key = sessionKey(mode, params.sets);
   const [questions, setQuestions] = useState<Question[] | null>(null);
   const [deck, setDeck] = useState<DeckState | null>(null);
   const [currentId, setCurrentId] = useState<string | null>(null);
@@ -83,8 +89,8 @@ export default function ExerciseScreen() {
    *
    * Previewing an earlier question used to show only the correct answer, so there was no way
    * to see what had actually been picked at the time — which is the whole point of that
-   * preview. Kept in screen memory only: there's nothing to restore across sessions, since
-   * the preview only ever looks at this one.
+   * preview. Kept with the rest of the session in process memory (`practiceSession`), so it
+   * survives leaving the screen but never reaches the database.
    */
   const [picks, setPicks] = useState<Map<string, Letter>>(new Map());
   /**
@@ -168,9 +174,35 @@ export default function ExerciseScreen() {
       const pool = await questionsForPlan(plan, mode);
       if (cancelled) return;
 
-      const ids = pool.map((question) => question.id);
+      const poolIds = pool.map((question) => question.id);
+      const saved = restoreSession(key, { levels, weak: isWeak, poolIds });
+      // The mistakes set is re-read from the database, which no longer lists the questions
+      // fixed in that session — the session's own questions are the ones to come back to.
+      const ids = saved ? saved.deck.cards.map((card) => card.questionId) : poolIds;
       const known = await loadCards(ids, mode);
       if (cancelled) return;
+
+      if (saved) {
+        // Fresh cards from the database, everything else as it was left. If the screen was
+        // left during the 550 ms advance after a correct answer, that answer is still on
+        // screen — "Dalej" has to be there, or nothing would move the quiz on.
+        setQuestions(isWeak ? content.questionsByIds(ids) : pool);
+        setDeck(withCards(saved.deck, createDeck(ids, known, levels).cards));
+        setHistory([...saved.history]);
+        setPicks(new Map(saved.picks));
+        setOrders(new Map(saved.orders));
+        // `advance` reads the drawn answers from the ref, so restoring only the state would
+        // lose them on the first "Dalej".
+        viewsRef.current = new Map(saved.views);
+        setViews(viewsRef.current);
+        setCurrentId(saved.currentId);
+        setOrder(saved.currentId ? (saved.orders.get(saved.currentId) ?? []) : []);
+        setPicked(saved.picked);
+        setRevealed(saved.revealed);
+        setReviewIndex(null);
+        setNeedsManualNext(saved.picked !== null);
+        return;
+      }
 
       const state = createDeck(ids, known, levels);
       setQuestions(pool);
@@ -186,7 +218,26 @@ export default function ExerciseScreen() {
     return () => {
       cancelled = true;
     };
-  }, [plan, mode, levels, advance]);
+  }, [plan, mode, levels, advance, key, isWeak]);
+
+  /**
+   * Keeps the session in process memory as it changes, so leaving the set and coming back —
+   * by the header arrow, say, which sits right next to "‹ Poprzednie" — lands on the same
+   * question with the same history. Nothing is saved before the set has loaded.
+   */
+  useEffect(() => {
+    if (!deck || !questions) return;
+    saveSession(key, {
+      deck,
+      currentId,
+      orders,
+      picks,
+      views,
+      history,
+      picked,
+      revealed,
+    });
+  }, [key, deck, questions, currentId, orders, picks, views, history, picked, revealed]);
 
   /**
    * The deck as seen by the refresh effect.
@@ -254,8 +305,12 @@ export default function ExerciseScreen() {
 
       return () => {
         cancelled = true;
+        // Leaving the screen: the 550 ms advance after a correct answer must not fire behind
+        // the exit animation and save a question nobody saw. Unmounting comes only after the
+        // animation; losing focus comes at its start.
+        cancelPendingAdvance();
       };
-    }, [mode, levels]),
+    }, [mode, levels, cancelPendingAdvance]),
   );
 
   const reviewing = reviewIndex !== null;

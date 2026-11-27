@@ -25,6 +25,7 @@ import {
 } from '../engine/exam';
 import type { StoredAnswer } from '../engine/attemptAnswers';
 import type { Card } from '../engine/leitner';
+import { clearSessions } from '../engine/practiceSession';
 
 const DATABASE = 'patent.db';
 
@@ -265,6 +266,8 @@ export async function resetProgress(
   mode: PracticeMode,
 ): Promise<void> {
   if (questionIds.length === 0) return;
+  // A remembered practice session would bring back the cards this reset just wiped.
+  clearSessions();
 
   const database = await db();
   const placeholders = questionIds.map(() => '?').join(',');
@@ -463,6 +466,7 @@ export async function questionsForPlan(
 }
 
 export async function resetAllProgress(): Promise<void> {
+  clearSessions();
   const database = await db();
   await database.runAsync('DELETE FROM progress');
 }
