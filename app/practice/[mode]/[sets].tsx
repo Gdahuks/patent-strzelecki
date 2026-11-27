@@ -101,7 +101,7 @@ export default function ExerciseScreen() {
    * of wrong answers (`drawAnswers`); a question is drawn once per session, not per showing,
    * because picks and the preview are keyed by question — a redraw when the same question
    * came back would replay an old pick against a new pair of answers. The ref is the source
-   * for `advance`, which is memoised without dependencies; the state drives rendering.
+   * for `advance`, which is memoised and must not depend on it; the state drives rendering.
    */
   const viewsRef = useRef<Map<string, Question>>(new Map());
   const [views, setViews] = useState<Map<string, Question>>(new Map());
@@ -440,7 +440,9 @@ export default function ExerciseScreen() {
     if (!deck) return;
     const next = startRefresh(deck);
     setDeck(next);
+    // Back to the current question in either case, not to a preview left open before.
     if (picked !== null) advance(next, currentId);
+    else setReviewIndex(null);
   }, [deck, picked, currentId, advance, cancelPendingAdvance]);
 
   const title = practiceSetTitle(plan);

@@ -287,6 +287,19 @@ describe('nextCard', () => {
     assert.ok(total / runs <= 14.7, `${total / runs} answers on average`);
   });
 
+  it('in the mistakes set, asks the last mistake again rather than a fixed question', () => {
+    const known = new Map([
+      ['a', { questionId: 'a', bucket: 0, seen: 2, correct: 0 }],
+      ['b', { questionId: 'b', bucket: 1, seen: 2, correct: 1 }],
+      ['c', { questionId: 'c', bucket: 1, seen: 2, correct: 1 }],
+    ]);
+    const state = applyAnswer(createDeck(['a', 'b', 'c'], known, 3), 'a', false);
+
+    assert.equal(nextCard(state, { random: () => 0, avoid: 'a', weak: true })?.questionId, 'a');
+    // Outside the mistakes set the usual rule stands: never the same question twice in a row.
+    assert.notEqual(nextCard(state, { random: () => 0, avoid: 'a' })?.questionId, 'a');
+  });
+
   it('statistical: no return within 3 for a simple learner, and mastery in under 400 answers', () => {
     for (const seed of [11, 12, 13]) {
       const random = seeded(seed);

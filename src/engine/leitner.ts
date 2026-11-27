@@ -228,6 +228,12 @@ export function nextCard(state: DeckState, options: NextCardOptions = {}): Card 
     if (!weak && rested.length > 0) return pickMastered(rested);
     return mostOverdue(inPlay);
   }
+  // Only fixed questions left besides the mistake just answered wrong: in the mistakes set ask
+  // that mistake again rather than a fixed question, which would only risk a new mistake.
+  if (weak) {
+    const again = state.cards.find((card) => card.questionId === avoid && !isMastered(card));
+    if (again) return again;
+  }
   return pickMastered(rested, mastered);
 }
 
