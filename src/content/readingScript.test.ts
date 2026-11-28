@@ -5,7 +5,7 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, it } from 'vitest';
 
-import { parseReadingSample, readerPosition, readingScript } from './readingScript';
+import { READER_MOVES, parseReadingSample, readerPosition, readingScript } from './readingScript';
 
 describe('readingScript', () => {
   it('embeds the starting position', () => {
@@ -165,15 +165,18 @@ function page(options?: { quietUntilTouch?: boolean }) {
     ReactNativeWebView: { postMessage: (raw: string) => samples.push(JSON.parse(raw)) },
   };
   const document = { body: { scrollHeight: 11000 } };
-  vm.runInNewContext(readingScript(0, options), {
+  const context = vm.createContext({
     window,
     document,
     Date,
     setTimeout: () => 0,
     clearTimeout: () => {},
   });
+  vm.runInContext(readingScript(0, options), context);
   const fire = (type: string) => (listeners.get(type) ?? []).forEach((listener) => listener());
-  return { window, samples, fire };
+  /** What the screen injects before a scroll the reader asked for with a native control. */
+  const readerMoves = () => vm.runInContext(READER_MOVES, context);
+  return { window, samples, fire, readerMoves };
 }
 
 describe('readingScript: an act opened at a unit or a search hit keeps its bookmark', () => {
@@ -194,6 +197,37 @@ describe('readingScript: an act opened at a unit or a search hit keeps its bookm
     fire('scroll');
 
     assert.equal(samples.at(-1)?.initial, false);
+  });
+
+  it('takes scrolling by mouse wheel or keyboard as the reader moving too', () => {
+    for (const type of ['wheel', 'keydown', 'pointerdown']) {
+      const { window, samples, fire } = page({ quietUntilTouch: true });
+      fire(type);
+      window.scrollY = 4000;
+      fire('scroll');
+      assert.equal(samples.at(-1)?.initial, false, type);
+    }
+  });
+
+  it('takes a move asked for by a native control — search arrows, the index — as the reader\'s', () => {
+    // The search arrows and the unit index sit outside the WebView, so no touch reaches the
+    // page; the screen injects READER_MOVES before scrolling for them.
+    const { window, samples, fire, readerMoves } = page({ quietUntilTouch: true });
+    readerMoves();
+    window.scrollY = 4000;
+    fire('scroll');
+
+    assert.equal(samples.at(-1)?.initial, false);
+  });
+
+  it('the search arrows, a new phrase and the unit index say the reader moved', () => {
+    const here = dirname(fileURLToPath(import.meta.url));
+    const findBar = readFileSync(join(here, '../components/FindBar.tsx'), 'utf8');
+    const act = readFileSync(join(here, '../../app/act/[slug].tsx'), 'utf8');
+    // step: the arrows; run by the reader: a typed phrase; the reload on page load stays quiet.
+    assert.match(findBar, /`\$\{READER_MOVES\}\$\{findCommands\.step\(delta\)\}`/);
+    assert.match(findBar, /run\(query, false\)/);
+    assert.match(act, /`\$\{READER_MOVES\}\$\{jumpScript\(item\.ref\)\}`/);
   });
 
   it('leaves lessons and a plain act opening as they were', () => {
