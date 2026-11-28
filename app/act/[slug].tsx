@@ -389,7 +389,7 @@ export default function ActScreen() {
           // A jump from a legal basis or a lesson link only works once the content has loaded.
           onLoadEnd={onLoaded}
           injectedJavaScript={
-            `${readingScript(startPosition)}\n${findHelpersScript()}\n${glossaryScript()}`
+            `${readingScript(startPosition, { quietUntilTouch: Boolean(ref || q) })}\n${findHelpersScript()}\n${glossaryScript()}`
             + `\n${futureScript()}`
           }
           {...SCROLL_PROPS}

@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
+import vm from 'node:vm';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, it } from 'vitest';
@@ -145,5 +146,70 @@ describe('readerPosition', () => {
       assert.match(source, /readerPosition\(/, file);
       assert.doesNotMatch(source, /reading\.(position|initial)\b/, file);
     }
+  });
+});
+
+/**
+ * Runs the reading script the way a WebView runs it — as source, against a fake window — and
+ * returns a way to fire events plus the samples it posted.
+ */
+function page(options?: { quietUntilTouch?: boolean }) {
+  const listeners = new Map<string, (() => void)[]>();
+  const samples: { initial: boolean; position: number }[] = [];
+  const window: Record<string, unknown> = {
+    scrollY: 0,
+    innerHeight: 1000,
+    addEventListener: (type: string, listener: () => void) => {
+      listeners.set(type, [...(listeners.get(type) ?? []), listener]);
+    },
+    ReactNativeWebView: { postMessage: (raw: string) => samples.push(JSON.parse(raw)) },
+  };
+  const document = { body: { scrollHeight: 11000 } };
+  vm.runInNewContext(readingScript(0, options), {
+    window,
+    document,
+    Date,
+    setTimeout: () => 0,
+    clearTimeout: () => {},
+  });
+  const fire = (type: string) => (listeners.get(type) ?? []).forEach((listener) => listener());
+  return { window, samples, fire };
+}
+
+describe('readingScript: an act opened at a unit or a search hit keeps its bookmark', () => {
+  it('marks scrolling before the first touch as unasked-for', () => {
+    // A jump to a unit scrolls the page by script, and that scroll used to overwrite the
+    // act's bookmark as if the reader had moved there.
+    const { window, samples, fire } = page({ quietUntilTouch: true });
+    window.scrollY = 4000;
+    fire('scroll');
+
+    assert.equal(samples.at(-1)?.initial, true);
+  });
+
+  it("takes the reader's own scrolling once they touch the text", () => {
+    const { window, samples, fire } = page({ quietUntilTouch: true });
+    fire('touchstart');
+    window.scrollY = 4000;
+    fire('scroll');
+
+    assert.equal(samples.at(-1)?.initial, false);
+  });
+
+  it('leaves lessons and a plain act opening as they were', () => {
+    const { window, samples, fire } = page();
+    window.scrollY = 4000;
+    fire('scroll');
+
+    assert.equal(samples.at(-1)?.initial, false);
+  });
+
+  it('the act screen asks for it exactly when opened with a unit or a phrase', () => {
+    const screen = readFileSync(
+      join(dirname(fileURLToPath(import.meta.url)), '../../app/act/[slug].tsx'),
+      'utf8',
+    );
+    const call = /readingScript\(startPosition, \{ quietUntilTouch: Boolean\(ref \|\| q\) \}\)/;
+    assert.match(screen, call);
   });
 });
