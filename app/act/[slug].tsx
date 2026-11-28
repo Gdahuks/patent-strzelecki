@@ -28,7 +28,12 @@ import { findHelpersScript } from '../../src/content/findInPage';
 import { applyVersions, dateLabel, unitLabel } from '../../src/content/versions';
 import { SCROLL_PROPS } from '../../src/content/webviewProps';
 import { jumpScript } from '../../src/content/jumpScript';
-import { parseReadingSample, readerPosition, readingScript } from '../../src/content/readingScript';
+import {
+  READER_MOVES,
+  parseReadingSample,
+  readerPosition,
+  readingScript,
+} from '../../src/content/readingScript';
 import { loadActPosition, saveActPosition } from '../../src/db/reading';
 import { lessonCss } from '../../src/content/lessonCss';
 import { useTheme } from '../../src/theme';
@@ -185,8 +190,9 @@ export default function ActScreen() {
       // An act keeps a bookmark, not progress, so the position is all it takes from a sample
       // — and only from samples the reader caused. The ones the page sends on load carry the
       // starting position, which is zero whenever the act was opened from a legal basis or
-      // from search; saving those wiped the bookmark on every such visit. A jump's own
-      // scroll does count as movement, so an act opened at a unit remembers that unit.
+      // from search; saving those wiped the bookmark on every such visit. The scroll of the
+      // jump or the search hit on opening doesn't count either (`quietUntilTouch`): opening an
+      // act from a legal basis and leaving straight away keeps the bookmark where it was.
       const reading = parseReadingSample(event.nativeEvent.data);
       const position = reading === null ? null : readerPosition(reading);
       if (position !== null) void saveActPosition(slug, position);
@@ -349,7 +355,7 @@ export default function ActScreen() {
             return (
               <Pressable
                 onPress={() => {
-                  webview.current?.injectJavaScript(jumpScript(item.ref));
+                  webview.current?.injectJavaScript(`${READER_MOVES}${jumpScript(item.ref)}`);
                   setShowIndex(false);
                 }}
                 accessibilityRole="link"
@@ -389,7 +395,7 @@ export default function ActScreen() {
           // A jump from a legal basis or a lesson link only works once the content has loaded.
           onLoadEnd={onLoaded}
           injectedJavaScript={
-            `${readingScript(startPosition)}\n${findHelpersScript()}\n${glossaryScript()}`
+            `${readingScript(startPosition, { quietUntilTouch: Boolean(ref || q) })}\n${findHelpersScript()}\n${glossaryScript()}`
             + `\n${futureScript()}`
           }
           {...SCROLL_PROPS}

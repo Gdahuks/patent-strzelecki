@@ -1,10 +1,11 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
+import vm from 'node:vm';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, it } from 'vitest';
 
-import { parseReadingSample, readerPosition, readingScript } from './readingScript';
+import { READER_MOVES, parseReadingSample, readerPosition, readingScript } from './readingScript';
 
 describe('readingScript', () => {
   it('embeds the starting position', () => {
@@ -145,5 +146,104 @@ describe('readerPosition', () => {
       assert.match(source, /readerPosition\(/, file);
       assert.doesNotMatch(source, /reading\.(position|initial)\b/, file);
     }
+  });
+});
+
+/**
+ * Runs the reading script the way a WebView runs it — as source, against a fake window — and
+ * returns a way to fire events plus the samples it posted.
+ */
+function page(options?: { quietUntilTouch?: boolean }) {
+  const listeners = new Map<string, (() => void)[]>();
+  const samples: { initial: boolean; position: number }[] = [];
+  const window: Record<string, unknown> = {
+    scrollY: 0,
+    innerHeight: 1000,
+    addEventListener: (type: string, listener: () => void) => {
+      listeners.set(type, [...(listeners.get(type) ?? []), listener]);
+    },
+    ReactNativeWebView: { postMessage: (raw: string) => samples.push(JSON.parse(raw)) },
+  };
+  const document = { body: { scrollHeight: 11000 } };
+  const context = vm.createContext({
+    window,
+    document,
+    Date,
+    setTimeout: () => 0,
+    clearTimeout: () => {},
+  });
+  vm.runInContext(readingScript(0, options), context);
+  const fire = (type: string) => (listeners.get(type) ?? []).forEach((listener) => listener());
+  /** What the screen injects before a scroll the reader asked for with a native control. */
+  const readerMoves = () => vm.runInContext(READER_MOVES, context);
+  return { window, samples, fire, readerMoves };
+}
+
+describe('readingScript: an act opened at a unit or a search hit keeps its bookmark', () => {
+  it('marks scrolling before the first touch as unasked-for', () => {
+    // A jump to a unit scrolls the page by script, and that scroll used to overwrite the
+    // act's bookmark as if the reader had moved there.
+    const { window, samples, fire } = page({ quietUntilTouch: true });
+    window.scrollY = 4000;
+    fire('scroll');
+
+    assert.equal(samples.at(-1)?.initial, true);
+  });
+
+  it("takes the reader's own scrolling once they touch the text", () => {
+    const { window, samples, fire } = page({ quietUntilTouch: true });
+    fire('touchstart');
+    window.scrollY = 4000;
+    fire('scroll');
+
+    assert.equal(samples.at(-1)?.initial, false);
+  });
+
+  it('takes scrolling by mouse wheel or keyboard as the reader moving too', () => {
+    for (const type of ['wheel', 'keydown', 'pointerdown']) {
+      const { window, samples, fire } = page({ quietUntilTouch: true });
+      fire(type);
+      window.scrollY = 4000;
+      fire('scroll');
+      assert.equal(samples.at(-1)?.initial, false, type);
+    }
+  });
+
+  it('takes a move asked for by a native control — search arrows, the index — as the reader\'s', () => {
+    // The search arrows and the unit index sit outside the WebView, so no touch reaches the
+    // page; the screen injects READER_MOVES before scrolling for them.
+    const { window, samples, fire, readerMoves } = page({ quietUntilTouch: true });
+    readerMoves();
+    window.scrollY = 4000;
+    fire('scroll');
+
+    assert.equal(samples.at(-1)?.initial, false);
+  });
+
+  it('the search arrows, a new phrase and the unit index say the reader moved', () => {
+    const here = dirname(fileURLToPath(import.meta.url));
+    const findBar = readFileSync(join(here, '../components/FindBar.tsx'), 'utf8');
+    const act = readFileSync(join(here, '../../app/act/[slug].tsx'), 'utf8');
+    // step: the arrows; run by the reader: a typed phrase; the reload on page load stays quiet.
+    assert.match(findBar, /`\$\{READER_MOVES\}\$\{findCommands\.step\(delta\)\}`/);
+    assert.match(findBar, /run\(query, false\)/);
+    assert.match(act, /`\$\{READER_MOVES\}\$\{jumpScript\(item\.ref\)\}`/);
+  });
+
+  it('leaves lessons and a plain act opening as they were', () => {
+    const { window, samples, fire } = page();
+    window.scrollY = 4000;
+    fire('scroll');
+
+    assert.equal(samples.at(-1)?.initial, false);
+  });
+
+  it('the act screen asks for it exactly when opened with a unit or a phrase', () => {
+    const screen = readFileSync(
+      join(dirname(fileURLToPath(import.meta.url)), '../../app/act/[slug].tsx'),
+      'utf8',
+    );
+    const call = /readingScript\(startPosition, \{ quietUntilTouch: Boolean\(ref \|\| q\) \}\)/;
+    assert.match(screen, call);
   });
 });

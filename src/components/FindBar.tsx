@@ -11,6 +11,7 @@ import {
   parseFindMessage,
 } from '../content/findInPage';
 import { announce } from '../a11y/announce';
+import { READER_MOVES } from '../content/readingScript';
 import { useTheme } from '../theme';
 
 /**
@@ -85,12 +86,15 @@ export function useFindInPage(
 
   useEffect(() => stop, [stop]);
 
+  // `byReader` is false only for the pass on page load (`rerun`), which must not move the
+  // act's bookmark; a typed phrase is the reader's own move (`READER_MOVES`).
   const run = useCallback(
-    (next: string) => {
+    (next: string, byReader = true) => {
       const needle = findNeedle(next);
       if (needle === running.current) return;
       running.current = needle;
-      webview.current?.injectJavaScript(findCommands.run(needle));
+      const command = findCommands.run(needle);
+      webview.current?.injectJavaScript(byReader ? `${READER_MOVES}${command}` : command);
     },
     [webview],
   );
@@ -109,7 +113,7 @@ export function useFindInPage(
 
   const step = useCallback(
     (delta: number) => {
-      webview.current?.injectJavaScript(findCommands.step(delta));
+      webview.current?.injectJavaScript(`${READER_MOVES}${findCommands.step(delta)}`);
     },
     [webview],
   );
@@ -154,7 +158,7 @@ export function useFindInPage(
 
   const rerun = useCallback(() => {
     running.current = '';
-    run(query);
+    run(query, false);
   }, [run, query]);
 
   return { open, query, state, change, step, close, toggle, accept, rerun, focusOnOpen };

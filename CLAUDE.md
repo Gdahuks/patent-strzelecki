@@ -245,6 +245,14 @@ through `readerPosition` in `src/content/readingScript.ts`, which drops those sa
 reads both screens as text to keep it that way. The act screen used to save every sample and
 wiped its bookmark on every such visit.
 
+**An act opened at a unit or a search hit saves nothing until the reader moves**
+(`readingScript(…, { quietUntilTouch: true })`). The jump and the first search hit scroll the
+page by script, and those scrolls used to land in the bookmark, so opening the Penal Code from a
+legal basis moved its bookmark to that article. Any reader move lifts the quiet: a touch, a wheel,
+a key or a pointer on the page, or `READER_MOVES`, which the screen injects before scrolling for a
+native control — the search arrows, a typed phrase, the unit index. The pass that re-runs the
+search on page load stays quiet. Lessons never use the option.
+
 **Reading progress and the reading position are two different numbers.** `position` is the last
 place the reader was and answers only "where do I open this lesson"; `max_position` is the
 furthest **confirmed** place and is what the percentage and the read state are made of. One

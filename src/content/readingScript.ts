@@ -19,11 +19,38 @@ const REPORT_INTERVAL_MS = 400;
  */
 const IDLE_MS = 250;
 
-export function readingScript(startPosition: number): string {
+/**
+ * Injected by the screen before a scroll the reader asked for with a native control — the
+ * search arrows, a typed phrase, the act's unit index. Those sit outside the WebView, so no
+ * touch reaches the page, and without this the move would stay "unasked-for" (`readingScript`'s
+ * `quietUntilTouch`) and the bookmark wouldn't follow the reader.
+ */
+export const READER_MOVES = 'window.__psQuiet = false;';
+
+/**
+ * @param options.quietUntilTouch every sample counts as unasked-for until the reader first
+ *   moves: a touch, a wheel, a key or a pointer on the page, or `READER_MOVES` injected by the
+ *   screen for a native control. Screen-reader scroll actions raise none of those, so a
+ *   TalkBack user's position after such a visit is saved only from the next plain opening.
+ *   For an act opened at a unit or a search hit: the page then scrolls by script
+ *   (`jumpScript`, the find helpers), and that scroll used to overwrite the act's bookmark as
+ *   if the reader had moved there — opening an act from a legal basis and leaving straight
+ *   away must leave its reading position alone, the same as opening a lesson does.
+ */
+export function readingScript(
+  startPosition: number,
+  options: { quietUntilTouch?: boolean } = {},
+): string {
   const start = Math.min(1, Math.max(0, startPosition));
 
   return `(function () {
   var start = ${start};
+  window.__psQuiet = ${options.quietUntilTouch === true ? 'true' : 'false'};
+  if (window.__psQuiet) {
+    ['touchstart', 'wheel', 'keydown', 'pointerdown'].forEach(function (type) {
+      window.addEventListener(type, function () { window.__psQuiet = false; }, { passive: true });
+    });
+  }
 
   function maxScroll() {
     return Math.max(1, document.body.scrollHeight - window.innerHeight);
@@ -36,7 +63,7 @@ export function readingScript(startPosition: number): string {
       // A sample the reader didn't ask for: sent on load, so the tracker has a window to
       // measure time against. The screen takes the window and leaves the position alone —
       // opening a lesson and closing it must not leave a trace.
-      initial: initial === true,
+      initial: initial === true || window.__psQuiet === true,
       position: window.scrollY / maxScroll(),
       // The screen's height as a fraction of the page: the reader sees a band of text, not a
       // point, and the whole band is what counts as time on screen.
