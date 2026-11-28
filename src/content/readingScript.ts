@@ -32,9 +32,10 @@ export const READER_MOVES = 'window.__psQuiet = false;';
  *   moves: a touch, a wheel, a key or a pointer on the page, or `READER_MOVES` injected by the
  *   screen for a native control. Screen-reader scroll actions raise none of those, so a
  *   TalkBack user's position after such a visit is saved only from the next plain opening.
- *   For an act opened at a unit or a search hit: the page then scrolls by script (`jumpScript`, the find helpers), and that scroll used to overwrite the act's
- *   bookmark as if the reader had moved there — opening an act from a legal basis and leaving
- *   straight away must leave its reading position alone, the same as opening a lesson does.
+ *   For an act opened at a unit or a search hit: the page then scrolls by script
+ *   (`jumpScript`, the find helpers), and that scroll used to overwrite the act's bookmark as
+ *   if the reader had moved there — opening an act from a legal basis and leaving straight
+ *   away must leave its reading position alone, the same as opening a lesson does.
  */
 export function readingScript(
   startPosition: number,
